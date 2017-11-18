@@ -54,23 +54,6 @@ holey xs       = Just i : holey rest
 data Expr = V P.String | Lft Expr | App Expr [Expr] | Vdash Expr Expr 
   deriving Show
 
--- formTable :: [(P.String, Holey P.String, Associativity)]
--- formTable = map (\(n,s,p) -> (n, holey s, p))
---   [ ("box","[_]_",           NonAssoc)
---   , ("and","_/\\_",          LeftAssoc)
---   , ("or","_\\/_",           LeftAssoc)
---   , ("top" , "T", NonAssoc)
---   , ("bot" , "B", NonAssoc)
---   ]
-
-
--- structTable :: [(P.String, Holey P.String, Associativity)]
--- structTable = map (\(n,s,p) -> (n, holey s, p))
---   [ ("boxS","[[_]]_",           NonAssoc)
---   , ("comma","_,_",          LeftAssoc)
---   , ("I" , "I", NonAssoc)
---   ]
-
 
 
 mkCon :: (IsAtom l ~ 'False, SingI l, StringConv s Text, Ord t, IsString s) =>
@@ -196,103 +179,6 @@ parseTerm inStr = do
         (_ , r) -> throwError $ AmbiguousTermParse r
 
 
-
-
--- grammarMF' :: HashSet P.String -> [(P.String, Holey P.String, Associativity)] ->
---     Grammar r (Prod r P.String P.String (Term 'FormulaL 'MetaK Text))
--- grammarMF' mixfixPartsAdd formTable = mdo
---   metaA <- rule $ (Lift . Meta . toS) <$> satisfy (\x -> 
---             not (x `HS.member` mixfixParts) && 
---             not (T.isPrefixOf "f_" $ T.toLower $ toS x) && 
---             not (T.isPrefixOf "s_" $ T.toLower $ toS x))
---             <?> "meta variable, atom"
---   metaF <- rule $ (Meta . toS) <$> satisfy (\x -> 
---             not (x `HS.member` mixfixParts) && 
---             not (T.isPrefixOf "at_" $ T.toLower $ toS x) && 
---             not (T.isPrefixOf "s_" $ T.toLower $ toS x))
---             <?> "meta variable, formula"
---   atomF <- rule $ metaF
---             <|> Lift <$> metaA
---             <|> namedToken "(" *> exprF <* namedToken ")"
---   exprF <- mixfixExpression tableF atomF (mkCon lookupF)
---   return exprF
---   where
---     tableF = map (:[]) $ map (\(_,x,y) -> (map (map namedToken) x, y)) formTable
---     lookupF = M.fromList $ map (\(n,h,_) -> (h,n)) formTable
---     mixfixParts = HS.fromList [s | (_, ys, _) <- formTable , Just s <- ys]
---             `mappend` mixfixPartsAdd
---             `mappend` HS.fromList ["(", ")", "|-"]
-
-
--- grammarMS' :: HashSet P.String -> [(P.String, Holey P.String, Associativity)] -> [(P.String, Holey P.String, Associativity)] ->
---     Grammar r (Prod r P.String P.String (Term 'StructureL 'MetaK Text))
--- grammarMS' mixfixPartsAdd formTable structTable = mdo
---   exprF <- grammarMF' mixfixParts formTable
-
---   metaS <- rule $ (Meta . toS) <$> satisfy (\x -> 
---             not (x `HS.member` mixfixParts) && 
---             not (T.isPrefixOf "at_" $ T.toLower $ toS x) && 
---             not (T.isPrefixOf "f_" $ T.toLower $ toS x))
---             <?> "meta variable, structure"
---   atomS <- rule $ metaS
---             <|> Lift <$> exprF
---             <|> namedToken "(" *> exprS <* namedToken ")"
---   exprS <- mixfixExpression tableS atomS (mkCon lookupS)
---   return exprS
---   where
---     tableS = map (:[]) $ map (\(_,x,y) -> (map (map namedToken) x, y)) structTable
---     lookupS = M.fromList $ map (\(n,h,_) -> (h,n)) structTable
---     mixfixParts = HS.fromList [s | (_, ys, _) <- structTable , Just s <- ys]
---             `mappend` mixfixPartsAdd
---             `mappend` HS.fromList ["(", ")", "|-"]
-
-
-
-
--- grammarCF' :: HashSet P.String -> [(P.String, Holey P.String, Associativity)] ->
---     Grammar r (Prod r P.String P.String (Term 'FormulaL 'ConcreteK Text))
--- grammarCF' mixfixPartsAdd formTable = mdo
---   ident <- rule $ (Base . toS) <$> satisfy (not . (`HS.member` mixfixParts))
---             <?> "identifier"
---   atomF <- rule $ Lift <$> ident
---             <|> namedToken "(" *> exprF <* namedToken ")"
---   exprF <- mixfixExpression tableF atomF (mkCon lookupF)
---   return exprF
---   where
---     tableF = map (:[]) $ map (\(_,x,y) -> (map (map namedToken) x, y)) formTable
---     lookupF = M.fromList $ map (\(n,h,_) -> (h,n)) formTable
---     mixfixParts = HS.fromList [s | (_, ys, _) <- formTable , Just s <- ys]
---             `mappend` mixfixPartsAdd
---             `mappend` HS.fromList ["(", ")", "|-"]
-
-
--- grammarCS' :: HashSet P.String -> [(P.String, Holey P.String, Associativity)] -> [(P.String, Holey P.String, Associativity)] ->
---     Grammar r (Prod r P.String P.String (Term 'StructureL 'ConcreteK Text))
--- grammarCS' mixfixPartsAdd formTable structTable = mdo
---   exprF <- grammarCF' mixfixParts formTable
---   atomS <- rule $ Lift <$> exprF
---             <|> namedToken "(" *> exprS <* namedToken ")"
---   exprS <- mixfixExpression tableS atomS (mkCon lookupS)
---   return exprS
---   where
---     tableS = map (:[]) $ map (\(_,x,y) -> (map (map namedToken) x, y)) structTable
---     lookupS = M.fromList $ map (\(n,h,_) -> (h,n)) structTable
---     mixfixParts = HS.fromList [s | (_, ys, _) <- structTable , Just s <- ys]
---             `mappend` mixfixPartsAdd
---             `mappend` HS.fromList ["(", ")", "|-"]
-
-
--- grammarDSeq :: CalcType -> Set CalcType -> Grammar r (Prod r P.String P.String (Term 'StructureL k a)) ->
---     Grammar r (Prod r P.String P.String (DSequent k a))
--- grammarDSeq defaultType types structGrammar = mdo
---   typ <- rule $ (Type . toS) <$> satisfy 
---             (\x -> (Type $ toS x) `S.member` types)
---             <?> "type of sequent"
---   exprS <- structGrammar
---   atomS <- rule $ DSeq <$> (exprS <* namedToken "|-") <*> (namedToken "{" *> typ <* namedToken "}") <*> exprS
---                 <|> (\x y -> DSeq x defaultType y) <$> exprS <* namedToken "|-" <*> exprS
---   return atomS
-  
 
 grammarDSeq :: TermGrammar 'StructureL k => 
     CalcMT x (Grammar r) (Prod r P.String P.String (DSequent k Text))
