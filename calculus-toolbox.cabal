@@ -1,0 +1,72 @@
+name:                calculus-toolbox
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/goodlyrottenapple/calculus-toolbox-2
+license:             MIT
+license-file:        LICENSE
+author:              Samuel Balco
+maintainer:          goodlyrottenapple@gmail.com
+copyright:           2017 Samuel Balco
+category:            Theorem Provers
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  ghc-options:         -Wall
+  exposed-modules:     Terms
+                     --  SequentCalc
+                     -- , SequentCalcJSON
+                     --, Rules
+                     --, RulesInv
+                     --, Terms.TH
+                     , Terms.JSON
+                     , Terms.Parsers
+  other-modules:       Lib.Prelude
+  build-depends:       base >= 4.7 && < 5
+                     , protolude >= 0.1.6 && < 0.2
+                     , array
+                     , random
+                     , text
+                     , containers
+                     , bifunctors
+                     , template-haskell
+                     , singletons
+                     , pretty-tree
+                     , aeson
+                     , pretty-show
+                     -- , parsec
+                     , Earley
+                     , unordered-containers
+                     , vector
+                     , regex-compat
+                     , mtl
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings, NoImplicitPrelude
+
+executable calculus-toolbox-exe
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , calculus-toolbox
+                     , protolude >= 0.1.6 && < 0.2
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings, NoImplicitPrelude
+
+test-suite calculus-toolbox-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , mcsequent
+                     , protolude >= 0.1.6 && < 0.2
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings, NoImplicitPrelude
+
+source-repository head
+  type:     git
+  location: https://github.com/goodlyrottenapple/calculus-toolbox-2
