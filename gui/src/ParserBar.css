@@ -1,0 +1,29 @@
+#BottomBar {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  padding :15px;
+  /*display: flex;*/
+}
+
+
+#BottomBar > div.input {
+  width: 100%;
+}
+
+#BottomBar > div.input > input {
+  width: 100%;
+}
+
+#Rendered {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-bottom: 5px;
+	width: 100%;
+	overflow-y: auto;
+}
+
+
+#Rendered > span {
+	/*padding-left: 20px;*/
+}

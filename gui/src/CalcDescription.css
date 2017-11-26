@@ -1,0 +1,17 @@
+.codeArea {
+	border: 1px solid rgba(34,36,38,.15);
+    border-radius: 5px;
+}
+
+.codeArea > div {
+    border-radius: 4px;
+    /*border-top-left-radius: 4px;*/
+}
+
+.codeArea > div > div:first-child {
+    border-radius: 4px;
+}
+
+.CodeMirror-scroll {
+    border-radius: 4px;
+}

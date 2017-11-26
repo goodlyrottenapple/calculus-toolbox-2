@@ -1,0 +1,25 @@
+
+.ruleTag {
+	position:absolute; 
+	display: inline-block;
+	float:left;
+	top:-12px;
+	left: 100%;
+	padding-left: 10px;
+	/*-moz-transform: translateX(-100%);
+	-ms-transform: translateX(-100%);
+	-webkit-transform: translateX(-100%);
+	-o-transform: translateX(-100%);
+	transform: translateX(-100%);*/
+}
+
+.ruleBar {
+	border-top: thin solid black;
+	position: relative;
+	padding-top: 2px;
+    margin-top: -4px;
+}
+
+.hasRight {
+	padding-right: 35px;
+}

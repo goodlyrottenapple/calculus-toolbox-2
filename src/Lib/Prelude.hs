@@ -81,3 +81,4 @@ eqLen :: Vec n a -> Vec m b -> Maybe (n :~: m)
 eqLen (Vec (n, _)) (Vec (m, _)) | n == m = Just (unsafeCoerce Refl)
                      | otherwise = Nothing
 
+

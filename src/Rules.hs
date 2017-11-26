@@ -6,117 +6,114 @@ This is a haddock comment describing your library
 For more information on how to write Haddock comments check the user guide:
 <https://www.haskell.org/haddock/doc/html/index.html>
 -}
+
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds #-}
+
 module Rules where
 
 import Lib.Prelude
-import SequentCalc
+import Terms
 
-id :: Eq a => Rule a
-id = Rule id'
-    where 
-        id' (Sequent [Atom a] [Atom b]) | a == b = Just []
-        id' _ = Nothing
+import qualified Prelude as P
+import Data.Aeson
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Map as M
 
-cut :: Formula a -> Rule a
-cut f = Rule cut'
+data PT a = PT {
+    premises :: [PT a]
+  , ruleName :: Text
+  , conclusion :: PT a
+}
+
+instance ToJSON a => ToJSON (PT a) where
+    toJSON (PT xs r c) = object [
+        r .= object [
+                "premises" .= toJSON xs,
+                "conclusion" .= toJSON c
+            ]
+        ]
+
+instance FromJSON (PT a) where
+    parseJSON = withObject "proof tree" $ \o ->
+        case  HM.keys o of 
+            [r]-> do 
+                pt <- (.:) @(HM.HashMap Text Value) o r
+                ps <- pt .: "premises"
+                c <- pt .: "conclusion"
+                return $ PT ps r c
+            _ -> P.fail "Invalid proof tree"
+
+
+
+unify :: (Ord a, Ord b) => MetaTerm l a -> ConcreteTerm l b -> Maybe (Map a (ConcreteTerm l b))
+unify (Meta x) y = Just $ M.singleton x y
+unify (Lift lx) (Lift ly) = case unify lx ly of
+    Just u ->  Just $ M.map (\t -> Lift t) u
+    Nothing -> Nothing
+
+unify (Con (C c1) vs) (Con (C c2) us) = case eqLen vs us of
+    Just Refl -> if c1 == c2 then unifyC vs us else Nothing
+    Nothing -> Nothing
+unify _ _ = Nothing
+
+  
+unifyC :: (Ord a, Ord b) => 
+    Vec n (MetaTerm l a) -> Vec n (ConcreteTerm l b) -> Maybe (Map a (ConcreteTerm l b))
+unifyC xs ys = foldr unifyFold (Just $ M.empty) (zipV xs ys)
     where
-        cut' (Sequent gamma delta) = Just [Sequent gamma (f:delta), Sequent (f:gamma) delta]
+        unifyFold _ Nothing = Nothing
+        unifyFold (x,y) (Just ws) = do
+            u <- unify x y
+            let uInteresction = M.intersection u ws
+                c = M.foldrWithKey (\k v b -> checkConsistent k v ws && b) True uInteresction
+            if c then return $ M.union u ws else Nothing
 
-andL1 :: Rule a
-andL1 = Rule andL1'
+        checkConsistent :: (Ord k, Eq v) => k -> v -> Map k v -> Bool
+        checkConsistent k v1 m | (Just v2) <- M.lookup k m = v1 == v2
+                               | otherwise = False
+
+
+unifySeq :: (Ord a, Ord b) => DSequent 'MetaK a -> DSequent 'ConcreteK b -> Maybe (Map a (ConcreteTerm 'StructureL b))
+unifySeq (DSeq ml _ mr) (DSeq cl _ cr) = unifyC (ml @@ mr @@ nil) (cl @@ cr @@ nil)
+
+sub :: Ord a => Map a (ConcreteTerm l b) -> MetaTerm l a -> Maybe (ConcreteTerm l b)
+sub m (Meta x) = M.lookup x m
+sub m (Lift lx) = do
+    let m' = M.foldrWithKey pickLifted M.empty m
+    t <- sub m' lx
+    return $ Lift t
     where
-        andL1' (Sequent ((And a _):gamma) delta) = Just [Sequent (a:gamma) delta]
-        andL1' _ = Nothing
-
-andL2 :: Rule a
-andL2 = Rule andL2'
-    where
-        andL2' (Sequent ((And _ b):gamma) delta) = Just [Sequent (b:gamma) delta]
-        andL2' _ = Nothing
-
-andR :: Rule a
-andR = Rule andR'
-    where
-        andR' (Sequent gamma ((And a b):delta)) = Just [Sequent gamma (a:delta), Sequent gamma (b:delta)]
-        andR' _ = Nothing
+        pickLifted k (Lift x) m = M.insert k x m
+        pickLifted _ _ m = m
+sub m (Con (C c) xs) = do
+    xs' <- traverse (sub m) xs
+    return $ Con (C c) xs'
 
 
-orR1 :: Rule a
-orR1 = Rule orR1'
-    where
-        orR1' (Sequent gamma ((Or a _):delta)) = Just [Sequent gamma (a:delta)]
-        orR1' _ = Nothing
-
-orR2 :: Rule a
-orR2 = Rule orR2'
-    where
-        orR2' (Sequent gamma ((Or _ b):delta)) = Just [Sequent gamma (b:delta)]
-        orR2' _ = Nothing
+subSeq :: Ord a => Map a (ConcreteTerm 'StructureL b) -> DSequent 'MetaK a -> Maybe (DSequent 'ConcreteK b)
+subSeq m (DSeq l n r) = do
+    lsub <- sub m l
+    rsub <- sub m r
+    return $ DSeq lsub n rsub
 
 
-orL :: Rule a
-orL = Rule orL2'
-    where
-        orL2' (Sequent ((Or a b):gamma) delta) = Just [Sequent (a:gamma) delta, Sequent (b:gamma) delta]
-        orL2' _ = Nothing
 
-impL :: Rule a
-impL = Rule impL'
-    where
-        impL' (Sequent ((Impl a b):gamma) delta) = Just [Sequent gamma (a:delta), Sequent (b:gamma) delta]
-        impL' _ = Nothing
-
-impR :: Rule a
-impR = Rule impR'
-    where
-        impR' (Sequent gamma ((Impl a b):delta)) = Just [Sequent (a:gamma) (b:delta)]
-        impR' _ = Nothing
-
-negL :: Rule a
-negL = Rule negL'
-    where
-        negL' (Sequent ((Neg a):gamma) delta) = Just [Sequent gamma (a:delta)]
-        negL' _ = Nothing
-
-negR :: Rule a
-negR = Rule negL'
-    where
-        negL' (Sequent gamma ((Neg a):delta)) = Just [Sequent (a:gamma) delta]
-        negL' _ = Nothing
-
-wL :: Rule a
-wL = Rule wL'
-    where
-        wL' (Sequent (_:gamma) delta) = Just [Sequent gamma delta]
-        wL' _ = Nothing
-
-wR :: Rule a
-wR = Rule wR'
-    where
-        wR' (Sequent gamma (_:delta)) = Just [Sequent gamma delta]
-        wR' _ = Nothing
+type RuleName = Text
 
 
-permute :: Int -> [a] -> Maybe [a]
-permute 0 xs = Just xs
-permute n xs | n > 0 && n <= length xs = case uncons $ drop n xs of
-    Just (a, as) -> Just $ a : take n xs ++ as
-    Nothing -> Nothing -- unreachable
-permute _ _ = Nothing
+isApplicable :: (Ord a, Ord b) => Rule a -> DSequent 'ConcreteK b -> Maybe [DSequent 'ConcreteK b]
+isApplicable Rule{..} dseq = do 
+    udict <- unifySeq concl dseq
+    mapM (subSeq udict) prems
 
-
-focusL :: Int -> Rule a
-focusL n = Rule focusL'
-    where
-        focusL' (Sequent gamma delta) = case permute n gamma of
-            Just gamma' -> Just [Sequent gamma' delta]
-            Nothing -> Nothing
-
-focusR :: Int -> Rule a
-focusR n = Rule focusR'
-    where
-        focusR' (Sequent gamma delta) = case permute n delta of
-            Just delta' -> Just [Sequent gamma delta']
-            Nothing -> Nothing
-
+-- getApplicableRules :: (Ord b, Monad m) => DSequent 'ConcreteK b -> 
+--     CalcMT [Rule Text] m (Map RuleName [DSequent 'ConcreteK b])
+-- getApplicableRules dseq = do
+--     rs <- asks rules
+--     return $ foldr (\r@Rule{..} m -> case isApplicable r dseq of {
+--         Just ps -> M.insert name ps m;
+--         Nothing -> m}) M.empty rs
 

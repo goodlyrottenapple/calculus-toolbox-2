@@ -36,7 +36,6 @@ For more information on how to write Haddock comments check the user guide:
 module Terms where
 
 import Lib.Prelude
--- import qualified Prelude as P
 -- import qualified Data.Text as T
 
 import Data.Map(Map)
@@ -107,55 +106,59 @@ instance Eq a => Eq (Term l k a) where
     _ == _ = False
 
 
+instance Ord a => Ord (Term 'AtomL 'MetaK a) where
+    compare (Meta a) (Meta b) = compare a b
+    compare _ _ = undefined
+
+instance Ord a => Ord (Term 'FormulaL 'MetaK a) where
+    compare (Meta a) (Meta b) = compare a b
+    compare (Meta _) (Lift _) = LT
+    compare (Meta _) (Con _ _) = LT
+    compare (Lift a) (Lift b) = compare a b
+    compare (Lift _) (Meta _) = GT
+    compare (Lift _) (Con _ _) = LT
+    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ _) (Meta _) = GT
+    compare (Con _ _) (Lift _) = GT
+
+
+instance Ord a => Ord (Term 'StructureL 'MetaK a) where
+    compare (Meta a) (Meta b) = compare a b
+    compare (Meta _) (Lift _) = LT
+    compare (Meta _) (Con _ _) = LT
+    compare (Lift a) (Lift b) = compare a b
+    compare (Lift _) (Meta _) = GT
+    compare (Lift _) (Con _ _) = LT
+    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ _) (Meta _) = GT
+    compare (Con _ _) (Lift _) = GT
+
+
+instance Ord a => Ord (Term 'AtomL 'ConcreteK a) where
+    compare (Base a) (Base b) = compare a b
+    compare _ _ = undefined
+
+
+instance Ord a => Ord (Term 'FormulaL 'ConcreteK a) where
+    compare (Lift a) (Lift b) = compare a b
+    compare (Lift _) (Con _ _) = LT
+    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ _) (Lift _) = GT
+ 
+instance Ord a => Ord (Term 'StructureL 'ConcreteK a) where
+    compare (Lift a) (Lift b) = compare a b
+    compare (Lift _) (Con _ _) = LT
+    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ _) (Lift _) = GT
+ 
+
 type MetaTerm l a = Term l 'MetaK a
 type ConcreteTerm l a = Term l 'ConcreteK a
 
 
-unify :: (Ord a, Ord b) => MetaTerm l a -> ConcreteTerm l b -> Maybe (Map a (ConcreteTerm l b))
-unify (Meta x) y = Just $ M.singleton x y
-unify (Lift lx) (Lift ly) = case unify lx ly of
-    Just u ->  Just $ M.map (\t -> Lift t) u
-    Nothing -> Nothing
-
-unify (Con (C c1) vs) (Con (C c2) us) = case eqLen vs us of
-    Just Refl -> if c1 == c2 then unifyC vs us else Nothing
-    Nothing -> Nothing
-
-    where
-        unifyC :: (Ord a, Ord b) => 
-            Vec n (MetaTerm l a) -> Vec n (ConcreteTerm l b) -> Maybe (Map a (ConcreteTerm l b))
-        unifyC xs ys = 
-            foldr unifyFold (Just $ M.empty) (zipV xs ys)
-
-        unifyFold _ Nothing = Nothing
-        unifyFold (x,y) (Just ws) = do
-            u <- unify x y
-            let uInteresction = M.intersection u ws
-                c = M.foldrWithKey (\k v b -> checkConsistent k v ws && b) True uInteresction
-            if c then return $ M.union u ws else Nothing
-
-        checkConsistent :: (Ord k, Eq v) => k -> v -> Map k v -> Bool
-        checkConsistent k v1 m | (Just v2) <- M.lookup k m = v1 == v2
-                               | otherwise = False
-unify _ _ = Nothing
 
 
-sub :: Ord a => Map a (ConcreteTerm l b) -> MetaTerm l a -> Maybe (ConcreteTerm l b)
-sub m (Meta x) = M.lookup x m
-sub m (Lift lx) = do
-    let m' = fromMaybe M.empty $ traverse pickLifted m
-    t <- sub m' lx
-    return $ Lift t
-    where
-        pickLifted (Lift x) = Just x
-        pickLifted _ = Nothing
-sub m (Con (C c) xs) = do
-    xs' <- traverse (sub m) xs
-    return $ Con (C c) xs'
-
-
-
-newtype CalcType = Type Text deriving (Eq, Ord, Show)
+newtype CalcType = Type Text deriving (Eq, Ord, Show, Generic, ToJSON)
 
 data ConnDescription (l :: Level) = ConnDescription {
     connName :: Text
@@ -164,7 +167,7 @@ data ConnDescription (l :: Level) = ConnDescription {
   , assoc :: Associativity
   , binding :: Int
   , parserSyntax :: Text
-  -- , latexSyntax :: Text
+  , latexSyntax :: Text
 } deriving Show
 
 data FinTypeCalculusDescription r = Description {
@@ -176,16 +179,128 @@ data FinTypeCalculusDescription r = Description {
 } deriving Show
 
 
-data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving Show
+data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving (Show, Eq)
 
--- data Sequent k a = Seq (Term 'FormulaL k a) (Term 'FormulaL k a)
+deriving instance Ord a => Ord (DSequent 'MetaK a)
+deriving instance Ord a => Ord (DSequent 'ConcreteK a)
+
+
+
+instance ToJSON a => ToJSON (Vec n a) where
+    toJSON = toJSON . toList
+
+
+instance ToJSON a => ToJSON (Term l k a) where
+    toJSON (Base c) = object [
+            "Base" .= toJSON c
+        ]
+    toJSON (Meta x) = object [
+            "Meta" .= toJSON x
+        ]
+    toJSON (Lift x) = object [
+            "Lift" .= toJSON x
+        ]
+    toJSON (Con (C n) vs) = object [
+            "Con" .= object [
+                "name" .= toJSON n,
+                "terms" .= toJSON vs
+            ]
+        ]
+
+mkCon :: (IsAtom l ~ 'False, SingI l, StringConv s Text, Ord t, IsString s) =>
+    Map t s -> t -> [Term l k a] -> Term l k a
+mkCon d h xs = case tlength xs of
+    (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C $ toS $ M.findWithDefault "???" h d) vs
+    _ -> undefined -- this can't happen...like, everrr...
+
+
+unsafeMkCon :: (IsAtom l ~ 'False, SingI l) =>
+    Text -> [Term l k a] -> Term l k a
+unsafeMkCon c xs = case tlength xs of
+    (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C c) vs
+    _ -> undefined -- this can't happen...like, everrr...
+
+
+
+instance ToJSON a => ToJSON (DSequent k a) where
+    toJSON (DSeq l (Type t) r) = object [
+            "DSeq" .= object [
+                "type" .= toJSON t,
+                "left" .= toJSON l,
+                "right" .= toJSON r
+            ]
+        ]
+
+
+instance FromJSON a => FromJSON (Term 'AtomL 'ConcreteK a) where
+    parseJSON = withObject "concrete atom term" $ \o -> Base <$> o .: "Base"
+
+instance FromJSON a => FromJSON (Term 'FormulaL 'ConcreteK a) where
+    parseJSON = withObject "concrete formula term" $ \o -> asum [
+            Lift <$> o .: "Lift",
+            do {
+                con <- o .: "Con";
+                n <- con .: "name";
+                xs <- con .: "terms";
+                return $ unsafeMkCon n xs
+            }
+        ]
+
+instance FromJSON a => FromJSON (Term 'StructureL 'ConcreteK a) where
+    parseJSON = withObject "concrete structure term" $ \o -> asum [
+            Lift <$> o .: "Lift",
+            do {
+                con <- o .: "Con";
+                n <- con .: "name";
+                xs <- con .: "terms";
+                return $ unsafeMkCon n xs
+            }
+        ]
+
+-- instance FromJSON a => FromJSON (Term 'AtomL 'MetaK a) where
+--     parseJSON = withObject "meta atom term" $ \o -> Meta <$> o .: "Meta"
+
+
+-- instance FromJSON a => FromJSON (Term 'FormulaL 'MetaK a) where
+--     parseJSON = withObject "meta formula term" $ \o -> asum [
+--             Meta <$> o .: "Meta",
+--             Lift <$> o .: "Lift",
+--             do {
+--                 con <- o .: "Con";
+--                 n <- con .: "name";
+--                 xs <- con .: "terms";
+--                 return $ unsafeMkCon n xs
+--             }
+--         ]
+
+-- instance FromJSON a => FromJSON (Term 'StructureL 'MetaK a) where
+--     parseJSON = withObject "meta structure term" $ \o -> asum [
+--             Meta <$> o .: "Meta",
+--             Lift <$> o .: "Lift",
+--             do {
+--                 con <- o .: "Con";
+--                 n <- con .: "name";
+--                 xs <- con .: "terms";
+--                 return $ unsafeMkCon n xs
+--             }
+--         ]
+
+instance FromJSON a => FromJSON (DSequent 'ConcreteK a) where
+    parseJSON = withObject "display sequent" $ \o -> do
+            dseq <- o .: "DSeq"
+            t <- dseq .: "type"
+            l <- dseq .: "left"
+            r <- dseq .: "right"
+            return $ DSeq l (Type t) r
+
+-- data Sequent k a = Seq [Term 'FormulaL k a] [Term 'FormulaL k a]
 
 
 data Rule a = Rule {
     name :: Text
   , prems :: [DSequent 'MetaK a]
   , concl :: DSequent 'MetaK a
-} deriving Show
+} deriving (Show, Eq, Ord, Generic, ToJSON)
 
 
 type CalcMT r m = ReaderT (FinTypeCalculusDescription r) m
@@ -198,8 +313,8 @@ runCalcErr env = runExcept . (\rT -> runReaderT rT env)
 
 data TypeableError a = TypeMismatch a CalcType CalcType 
                      | LevelMismatch a Level Level
-                     | TypeMismatchCon Text CalcType CalcType 
-                       deriving Show
+                     | TypeMismatchCon Text CalcType CalcType
+                       deriving (Show, Generic, ToJSON)
 
 
 connMap :: MonadReader r m => (r -> [ConnDescription t]) -> m (Map Text (ConnDescription t))
@@ -307,88 +422,3 @@ filterTypeable mf (r:rs) = do
     case runCalcErr env $ mf r of
         Left _ -> return rs'
         Right _ -> return $ r:rs'
-
-
-
--- -- calcName :: forall name l n as p b. KnownSymbol name => HomCon name l n as p b -> Text
--- -- calcName _ = toS $ symbolVal (Proxy :: Proxy name)
-
-
--- type family Fst (t :: (k,k)) where
---     Fst '(x,y) = x
-
--- type family Snd (t :: (k,k)) where
---     Snd '(x,y) = y
-
--- getParserSymbol :: forall name l n as p b ltx. KnownSymbol p => HomCon name l n as p b ltx -> Text
--- getParserSymbol _ = toS $ symbolVal (Proxy :: Proxy p)
-
--- getNoOfArgs :: forall name l n as p b ltx. KnownNat n => HomCon name l n as p b ltx -> Int
--- getNoOfArgs _ = fromIntegral $ natVal (Proxy :: Proxy n)
-
--- getFixity :: forall name l n as p b ltx. SingI as => HomCon name l n as p b ltx -> Terms.Fixity
--- getFixity _ = fromSing (sing :: Sing as)
-
--- getLevelT :: forall v l m a. SingI l => Term v l m a -> Level
--- getLevelT _ = fromSing (sing :: Sing l) 
-
--- getBinding :: forall name l n as p b ltx. KnownNat b => HomCon name l n as p b ltx -> Int
--- getBinding _ = fromIntegral $ natVal (Proxy :: Proxy b)
-
--- latexName :: forall name l n as p b ltx. KnownSymbol (Fst ltx) => HomCon name l n as p b ltx -> Text
--- latexName _ = toS $ symbolVal (Proxy :: Proxy (Fst ltx))
-
--- latexDef :: forall name l n as p b ltx. KnownSymbol (Snd ltx) => HomCon name l n as p b ltx -> Text
--- latexDef _ = toS $ symbolVal (Proxy :: Proxy (Snd ltx))
-
-
--- class PPrint a where
---     pprint :: a -> Text
---     mkTree :: a -> Tree Text
-
-
--- instance PPrint Char where
---     pprint x = toS [x]
---     mkTree x = Node (pprint x) []
-
--- instance PPrint Text where
---     pprint = identity 
---     mkTree x = Node x []
-
--- instance KnownSymbol p => PPrint (HomCon name l n as p b ltx) where
---     pprint c = getParserSymbol c
---     mkTree = undefined
-
--- instance PPrint Level where
---     pprint AtomL = "A"
---     pprint FormulaL = "F"
---     pprint StructureL = "S"
---     mkTree = undefined
-
-
-
--- instance (PPrint a) => PPrint (Term v l m a) where
---     pprint t@(MetaV a) = "?" <> (pprint $ getLevelT t) <> " " <> pprint a
---     pprint (Base a) = pprint a
---     pprint (Lift a) = pprint a
---     pprint (HomC c Nil) = pprint c
---     pprint (HomC c (x@(HomC _ _) :> Nil)) = pprint c <> " (" <> pprint x <> ")"
---     pprint (HomC c (x :> Nil)) = pprint c <> " " <> pprint x
---     pprint (HomC c (x@(HomC _ _) :> y :> Nil)) | getFixity c == Terms.InfixL = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x@(HomC _ _) :> y :> Nil)) | getFixity c == Terms.InfixR = "(" <> pprint x <> ")" <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x :> y@(HomC _ _) :> Nil)) | getFixity c == Terms.InfixR = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x :> y@(HomC _ _) :> Nil)) | getFixity c == Terms.InfixL = pprint x <> " " <> pprint c <> " " <> "(" <> pprint y <> ")"
---     pprint (HomC c (x :> y :> Nil)) | getFixity c /= Terms.Prefix = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c ts) = (pprint c) <> (T.intercalate " " $ toList $ map pprint ts)
-
---     mkTree t@(MetaV a) = Node "?" [mkTree a]
---     mkTree (Base a) = Node (pprint a) []
---     mkTree t@(Lift a) = Node (pprint $ getLevelT t) [mkTree a]
---     mkTree (HomC c ts) = Node (pprint c) (map mkTree $ toList ts)
-
-
--- pprintTree :: PPrint a => a -> Text
--- pprintTree a = toS $ drawVerticalTree $ map toS $ mkTree a
-
--- class MkHomCon v c where
---     mkHomCon :: Text -> [Term v c m a] -> Maybe (Term v c m a)
