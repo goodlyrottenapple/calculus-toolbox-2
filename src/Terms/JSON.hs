@@ -62,7 +62,7 @@ data CalcDesc = CalcDesc {
     name :: Text
   , rawCalc :: Text 
   , rawRules :: Text 
-} deriving (Generic, ToJSON)
+} deriving (Generic, ToJSON, FromJSON)
 
 -- -- calcName :: forall name l n as p b. KnownSymbol name => HomCon name l n as p b -> Text
 -- -- calcName _ = toS $ symbolVal (Proxy :: Proxy name)

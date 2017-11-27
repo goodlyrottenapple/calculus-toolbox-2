@@ -1,5 +1,6 @@
 import React, {Component} from 'react'
 import './ParserBar.css'
+import { getParseDSeq } from './ServantApi.js'
 
 import KaTeXRenderer from './KaTeXRenderer.js'
 import { Input } from 'semantic-ui-react'
@@ -34,25 +35,16 @@ export default class ParserBar extends Component {
 
   parseSequent(e) {
     const didPressEnter = (e.key === 'Enter') ? true : false
-    // console.log("sending: "+e.target.value)
-    fetch("http://localhost:8081/parseDSeq?val="+e.target.value, {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    })
-      // .then(handleErrors)
-      .then(this.handleErrors)
-      .then(data =>{
-          // console.log(data)
-          this.setState({ sequent: data })
-          this.setState({ parseError: "" })
-          if (didPressEnter) this.props.callback(data);
-      })
-      
-      .catch(error => {
-        error.data.then(data => console.log(data))
-        this.setState({ parseError: "error" })
-      });
+    const success = (data) => {
+      this.setState({ sequent: data })
+      this.setState({ parseError: "" })
+      if (didPressEnter) this.props.callback(data);
+    }
+    const error = (data) => {
+      console.log(data)
+      this.setState({ parseError: "error" })
+    }
+    getParseDSeq(e.target.value, 'no-cache', success, error)
   }
 
   render() {

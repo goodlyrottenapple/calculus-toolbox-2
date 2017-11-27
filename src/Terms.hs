@@ -36,7 +36,7 @@ For more information on how to write Haddock comments check the user guide:
 module Terms where
 
 import Lib.Prelude
--- import qualified Data.Text as T
+import qualified Data.Text as T
 
 import Data.Map(Map)
 import qualified Data.Map as M
@@ -311,6 +311,11 @@ runCalcErr :: FinTypeCalculusDescription r -> CalcMErr r e a -> Either e a
 runCalcErr env = runExcept . (\rT -> runReaderT rT env)
 
 
+runCalcState :: Monad m => FinTypeCalculusDescription r -> s -> CalcMT r (StateT s m) a -> m a
+runCalcState env s ma = liftM fst $ runStateT (runReaderT ma env) s
+
+
+
 data TypeableError a = TypeMismatch a CalcType CalcType 
                      | LevelMismatch a Level Level
                      | TypeMismatchCon Text CalcType CalcType
@@ -327,18 +332,6 @@ connMap f = do
 class TypeableCTerm l where
     typeableC' :: Ord a => Map a CalcType -> CalcType -> Term l 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
 
-class TypeableMTerm l where
-    typeableM' :: Ord a => Map a (Level, CalcType) -> CalcType -> Term l 'MetaK a -> CalcMErr r (TypeableError a) (Map a (Level, CalcType))
-
-typeableMeta :: (MonadError (TypeableError k) m, Ord k) => 
-    Level -> Map k (Level, CalcType) -> CalcType -> k -> m (Map k (Level, CalcType))
-typeableMeta l acc t a = 
-        if a `M.member` acc then
-            let (l', t') = acc M.! a in case (t == t', l == l') of
-                (True, True) -> return $ acc
-                (False, _)   -> throwError $ TypeMismatch a t t'
-                (_, False)   -> throwError $ LevelMismatch a l l'
-        else return $ M.insert a (l, t) acc
 
 
 typeableCon :: (MonadReader d m, MonadError (TypeableError a) m) =>
@@ -367,36 +360,9 @@ instance TypeableCTerm 'StructureL where
     typeableC' acc t (Con (C c) vs) = typeableCon typeableC' structureConns acc t c (unVec vs)
 
 
-
-instance TypeableMTerm 'AtomL where
-    typeableM' acc t (Meta a) = typeableMeta AtomL acc t a
-    typeableM' _ _ (Lift _) = undefined
-
-instance TypeableMTerm 'FormulaL where
-    typeableM' acc t (Meta a) = typeableMeta FormulaL acc t a
-    typeableM' acc t (Lift a) = typeableM' acc t a
-    typeableM' acc t (Con (C c) vs) = typeableCon typeableM' formulaConns acc t c (unVec vs)
-
-instance TypeableMTerm 'StructureL where
-    typeableM' acc t (Meta a) = typeableMeta StructureL acc t a
-    typeableM' acc t (Lift a) = typeableM' acc t a
-    typeableM' acc t (Con (C c) vs) = typeableCon typeableM' structureConns acc t c (unVec vs)
-
-
 typeableC :: (Ord a, TypeableCTerm l) => CalcType -> 
     Term l 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
 typeableC = typeableC' M.empty
-
-
-typeableM :: (Ord a, TypeableMTerm l) => CalcType -> 
-    Term l 'MetaK a -> CalcMErr r (TypeableError a) (Map a (Level, CalcType))
-typeableM = typeableM' M.empty
-
-
-typeableMDSeq' :: Ord a => Map a (Level, CalcType) -> DSequent 'MetaK a -> CalcMErr r (TypeableError a) (Map a (Level, CalcType))
-typeableMDSeq' acc (DSeq l t r) = do
-    lacc <- typeableM' acc t l
-    typeableM' lacc t r
 
 
 typeableCDSeq' :: Ord a => Map a CalcType -> DSequent 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
@@ -406,19 +372,125 @@ typeableCDSeq' acc (DSeq l t r) = do
 
 
 
-typeableRule :: Ord a => Rule a -> CalcMErr r (TypeableError a) ()
+
+-- typeable MTerm now has two functions. it check that the variables are of the right type, i.e. A doesnt appear as an atprop variable
+-- as well as an agent variable. TypeableMTerm also fixes the level of the metavariables, as they are all parsed as AtomL meta-vars
+-- due to the ambiguity and the exponential blowup of the possible parse trees. This way, we get a deterministic parse and at type-checking, 
+-- try to get the most general levels of all MV's. the metavariables can still be manually disambiguate by prepending the name with a_/at_ for an
+-- atomL MV, f_ for formulaL and s_ for structureL. if left unspecified, the MV will default to a structureL one, unless it appears under a 
+-- formula connective, in which case it is lowered to formulaL. we do two passes over each term, first type-checking and figuring out the highest levels
+-- of all the MVs and second time (using fixMeta) to raise the MV to the highest possible level, which was determined from the previous pass in the 
+-- Map Text (Level, CalcType)
+
+class TypeableMTerm l where
+    typeableM' :: Map Text (Level, CalcType) -> Level -> CalcType -> Term l 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+    fixMeta :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> Term l 'MetaK Text -> m (Term l 'MetaK Text)
+
+typeableMeta :: (MonadError (TypeableError Text) m) => 
+    Map Text (Level, CalcType) -> Level -> CalcType -> Text -> m (Map Text (Level, CalcType))
+typeableMeta acc l t v = 
+    if v `M.member` acc then
+        let (_, t') = acc M.! v in case t == t' of
+            True  -> return $ insert v t l acc
+            False -> throwError $ TypeMismatch v t t'
+    else return $ insert v t l acc
+
+    where
+        insert :: Text -> t -> Level -> Map Text (Level, t) -> Map Text (Level, t)
+        insert iv it _ iacc | (T.isPrefixOf "a_" $ T.toLower iv) || (T.isPrefixOf "at_" $ T.toLower iv) = 
+            M.insert v (AtomL, it) iacc
+        insert iv it _ iacc | T.isPrefixOf "f_" $ T.toLower iv = M.insert iv (FormulaL, it) iacc
+        insert iv it _ iacc | T.isPrefixOf "s_" $ T.toLower iv = M.insert iv (StructureL, it) iacc
+        insert iv it il iacc | iv `M.member` iacc = let (il', it') = acc M.! iv in M.insert iv (min il il', it) iacc
+        insert iv it il iacc = M.insert iv (il, it) iacc
+
+
+typeableMCon :: (MonadReader d m, MonadError (TypeableError a) m) =>
+     (map -> Level -> CalcType -> trm -> m map) -> (d -> [ConnDescription l]) -> map -> Level -> CalcType -> Text -> [trm] -> m map
+typeableMCon tyF f acc l t c xs = do
+    conns <- connMap f
+    let ConnDescription{..} = conns M.! c 
+    if t == outType then do
+        let tsxs = zip inTypes xs 
+        foldrM (\(t', x) acc' -> tyF acc' l t' x) acc tsxs
+    else throwError $ TypeMismatchCon c t outType
+
+
+
+instance TypeableMTerm 'AtomL where
+    typeableM' acc l t (Meta a) = typeableMeta acc l t a
+    typeableM' _ _ _ (Lift _) = undefined
+
+    fixMeta acc (Meta a) | fst (acc M.! a) == AtomL = return $ Meta a
+    fixMeta acc (Meta a) | otherwise = throwError $ LevelMismatch a AtomL $ fst (acc M.! a)
+    fixMeta _ (Lift _) = undefined
+
+
+instance TypeableMTerm 'FormulaL where
+    typeableM' _ _ _ (Meta _) = error "should not be reachable"
+    typeableM' acc l t (Lift a) = typeableM' acc l t a
+    typeableM' acc _ t (Con (C c) vs) = typeableMCon typeableM' formulaConns acc FormulaL t c (unVec vs)
+
+    fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == FormulaL = return $ Meta a
+    fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == AtomL = return $ Lift $ Meta a
+    fixMeta acc (Lift (Meta a)) | otherwise = throwError $ LevelMismatch a FormulaL $ fst (acc M.! a)
+    fixMeta acc (Con c vs) = do
+        vs' <- mapM (fixMeta acc) vs
+        return $ Con c vs'
+
+
+instance TypeableMTerm 'StructureL where
+    typeableM' _ _ _ (Meta _) = error "should not be reachable"
+    typeableM' acc l t (Lift a) = typeableM' acc l t a
+    typeableM' acc l t (Con (C c) vs) = typeableMCon typeableM' structureConns acc StructureL t c (unVec vs)
+
+    fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == StructureL = return $ Meta a
+    fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == FormulaL = return $ Lift $ Meta a
+    fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == AtomL = return $ Lift $ Lift $ Meta a
+    fixMeta acc (Lift x) = do
+        x' <- fixMeta acc x
+        return $ Lift x'
+    fixMeta acc (Con c vs) = do
+        vs' <- mapM (fixMeta acc) vs
+        return $ Con c vs'
+
+
+typeableM :: (TypeableMTerm l) => CalcType -> 
+    Term l 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+typeableM = typeableM' M.empty StructureL
+
+
+typeableMDSeq' :: Map Text (Level, CalcType) -> DSequent 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+typeableMDSeq' acc (DSeq l t r) = do
+    lacc <- typeableM' acc StructureL t l
+    typeableM' lacc StructureL t r
+
+fixMDSeq :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> DSequent 'MetaK Text -> m (DSequent 'MetaK Text)
+fixMDSeq acc (DSeq l t r) = do
+    l' <- fixMeta acc l
+    r' <- fixMeta acc r
+    return $ DSeq l' t r'
+
+
+typeableRule :: Rule Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
 typeableRule Rule{..} = do
     conclAcc <- typeableMDSeq' M.empty concl
-    _ <- foldrM (\dseq acc -> typeableMDSeq' acc dseq) conclAcc prems
-    return ()
+    foldrM (\dseq acc -> typeableMDSeq' acc dseq) conclAcc prems
 
 
-filterTypeable :: (Monad m) => 
-    (t -> CalcMErr r e res) -> [t] -> CalcMT r m [t]
-filterTypeable _ [] = return []
-filterTypeable mf (r:rs) = do
-    rs' <- filterTypeable mf rs
-    env <- ask
-    case runCalcErr env $ mf r of
-        Left _ -> return rs'
-        Right _ -> return $ r:rs'
+fixRule :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> Rule Text -> m (Rule Text)
+fixRule acc Rule{..} = do
+    concl' <- fixMDSeq acc concl
+    prems' <- mapM (fixMDSeq acc) prems
+    return $ Rule name prems' concl'
+
+
+-- filterTypeable :: (Monad m) => 
+--     (t -> CalcMErr r e res) -> [t] -> CalcMT r m [t]
+-- filterTypeable _ [] = return []
+-- filterTypeable mf (r:rs) = do
+--     rs' <- filterTypeable mf rs
+--     env <- ask
+--     case runCalcErr env $ mf r of
+--         Left _ -> return rs'
+--         Right _ -> return $ r:rs'

@@ -1,5 +1,7 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
+import { getCalcDesc , postCalcDesc } from './ServantApi.js'
+
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
 import { Form, Modal, Button } from 'semantic-ui-react'
@@ -16,11 +18,14 @@ export default class CalcDescription extends Component {
     this.updateCalc = this.updateCalc.bind(this)
     this.updateRules = this.updateRules.bind(this)
     this.handleChange = this.handleChange.bind(this)
+    this.saveCalc = this.saveCalc.bind(this)
   }
 
   componentWillReceiveProps(nextProps) {
     if (nextProps.open) {
-      this.getCalcDesc()
+      const success = (data) => this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
+      const error = (data) => console.log(data)
+      getCalcDesc('no-cache', success, error)
     }
   }
 
@@ -34,31 +39,15 @@ export default class CalcDescription extends Component {
     this.setState({ rules: newCode });
   }
 
-  handleErrors(response) {
-    if (response.ok) {
-      return response.json();
+  saveCalc () {
+    const success = (data) => {
+      this.props.onSave()
+      this.props.onClose()
     }
-    var error = new Error()
-    error.data = response.json();
-    throw error;
+    const error = (data) => console.log(data)
+    const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
+    postCalcDesc(body, 'private', success, error)
   }
-
-  getCalcDesc () {
-    fetch("http://localhost:8081/getCalcDesc", {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    })
-      .then(this.handleErrors)
-      .then(data =>{
-          // console.log(data)
-          this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
-      })
-      .catch(error => {
-        error.data.then(data => console.log(data))
-      });
-  }
-
   render() {
     const options = {
       lineNumbers: true
@@ -91,10 +80,7 @@ export default class CalcDescription extends Component {
         </Modal.Content>
         <Modal.Actions>
           <Button negative onClick={this.props.onClose}>Cancel</Button>
-          <Button positive onClick={() => {
-            this.props.onClose()
-            this.props.callback({name: this.state.name, calc: this.state.calc, rules:this.state.rules})
-          }} labelPosition='right' icon='save' content='Save' />
+          <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save' />
         </Modal.Actions>
       </Modal>
 

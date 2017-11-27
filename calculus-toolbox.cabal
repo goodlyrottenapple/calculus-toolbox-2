@@ -45,6 +45,7 @@ library
                      , regex-compat
                      , mtl
                      , servant-server
+                     , servant-js
                      , wai
                      , wai-cors
                      , warp

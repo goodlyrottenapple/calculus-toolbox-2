@@ -8,6 +8,7 @@
 {-# LANGUAGE StandaloneDeriving      #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE FlexibleContexts      #-}
 
 
 module GUI where
@@ -19,6 +20,9 @@ import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
 
 import Servant
+import Servant.JS
+-- import           Servant.Foreign
+import           Servant.JS.Internal
 import Data.IORef
 import Data.Aeson
 
@@ -31,18 +35,21 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import Control.Monad.Except
 
+import Text.Earley
 
 data GUIError = CalculusDescriptionNotLoaded
               -- | TermParseE TermParseError
               | Custom Text deriving (Generic, ToJSON)
--- type Status e = Either e ()
+
+
+data Status = Success deriving (Generic, ToJSON)
 
 
 type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
-         :<|> "getMacros" :> Get '[JSON] Macros
-         :<|> "getApplicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
-         :<|> "getCalcDesc" :> Get '[JSON] CalcDesc
-         -- :<|> "loadCalc" :> Capture "val" Text :> Get '[JSON] (Status CalculusDescParseError)
+         :<|> "macros" :> Get '[JSON] Macros
+         :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+         :<|> "calcDesc" :> Get '[JSON] CalcDesc
+         :<|> "calcDesc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] Status
 
 
 api :: Proxy API
@@ -59,7 +66,6 @@ newtype Config r = Config {
     currentCalcDec :: IORef (Maybe (Text, CalDescStore (FinTypeCalculusDescription r)))
 }
 
--- type AppM r = ReaderT (Config r) Handler
 
 type AppM r = ReaderT (Config r) IO
 
@@ -72,7 +78,17 @@ getCaclDesc = do
         Just (_, CalDescStore{..}) -> return parsed
         Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
 
+putCaclDesc :: Text -> Text -> Text -> FinTypeCalculusDescription r -> AppM r ()
+putCaclDesc name rawCalc rawRules parsed = do
+    cRef <- asks currentCalcDec
+    liftIO $ writeIORef cRef $ Just (name, CalDescStore{..})
 
+liftErrAppM :: ToJSON e => Except e a -> AppM r a
+liftErrAppM x = do
+    case runExcept x of
+        Left err -> throwIO $ err300 {errBody = encode err}
+        Right res -> return res
+     
 
 
 liftCalcErrAppM :: ToJSON e => CalcMErr r e a -> AppM r a
@@ -133,19 +149,49 @@ getCaclDescH = do
         Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
 
 
+setCaclDescH :: CalcDesc -> AppM [Rule Text] Status
+setCaclDescH CalcDesc{..} = do
+    cd <- liftErrAppM $ parseFinTypeCalculusDescription rawCalc
+    -- rules <- liftErrAppM $ runReaderT (parseRules rawRules) cd
+    rules <- parse cd $ (splitRules . toS) rawRules
+
+    putCaclDesc name rawCalc rawRules cd{rules = rules}
+    -- write the calc to a file
+    liftIO $ writeFile ("./calculi/" ++ toS name ++ ".calc") rawCalc
+    liftIO $ writeFile ("./calculi/" ++ toS name ++ ".rules") rawRules
+    return GUI.Success
+
+    where
+        parse :: FinTypeCalculusDescription x -> [[Char]] -> ReaderT (Config [Rule Text]) IO [Rule Text]  
+        -- parse :: FinTypeCalculusDescription x -> [[Char]] -> ReaderT (Config [Rule Text]) IO ()
+        parse _ [] = return []
+        parse e (r:rs) = do
+            r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
+                ([] , rep) -> throwIO $ err300 {errBody = encode $ TermParserError rep} 
+                (prules , rep) -> do
+                    -- print prules
+                    prulesMetaMap <- liftCalcErrAppM $ mapM typeableRule prules
+                    fixed <- liftCalcErrAppM $ mapM (\(m,r) -> fixRule m r)(zip prulesMetaMap prules)
+                    case fixed of
+                        []  -> throwIO $ err300 {errBody = encode $ RuleUntypeable name}
+                        [p] -> do
+                            print p
+                            return p 
+                        ps' -> throwIO $ err300 {errBody = encode $ AmbiguousRuleParse ps'}
+            -- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
+            --     ([] , rep) -> throwIO $ err300 {errBody = encode $ TermParserError rep} 
+            --     (ps@(Rule{..}:_) , _)   -> do
+            --         ps' <-  liftCalcErrAppM @() $ filterTypeable typeableRule ps
+            --         print $ length ps'
+            --         case sort ps' of
+            --             []    -> throwIO $ err300 {errBody = encode $ RuleUntypeable name}
+            --             [p]   -> return p
+            --             (p:_) -> return p
+            rs' <- parse e rs
+                -- parse e rs
+            return $ r':rs'
 
 
-    -- liftCalcErrAppM @() $ getApplicableRules dseq
-
-
--- -- loadCalcH :: Text -> AppM r (Status CalculusDescParseError)
--- -- loadCalcH inStr = do
--- --     case runExcept $ parseFinTypeCalculusDescription inStr of
--- --         Left err -> return $ Left err
--- --         Right calc' -> do
--- --             calcRef <- asks currentCalcDec
--- --             _ <- liftIO $ writeIORef calcRef $ Just calc'
--- --             return $ Right ()
 
 
 ioToHandler :: Config r -> AppM r :~> Handler
@@ -156,7 +202,7 @@ readerServer :: Config [Rule Text] -> Server API
 readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
-server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH 
+server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH 
 
 myCors :: Middleware
 myCors = cors (const $ Just customPolicy)
@@ -176,14 +222,30 @@ mkConfig rawCalc rawRules = do
     let (Right c) = runExcept $ parseFinTypeCalculusDescription rawCalc
         (Right rs) = runCalcErr c (parseRules rawRules)
         parsed = c{rules = rs}
-    currentCalcDec <- newIORef $ Just ("Seq", CalDescStore{..})
+    currentCalcDec <- newIORef $ Just ("Sequent", CalDescStore{..})
     return Config{..}
+
+
+test = listFromAPI (Proxy :: Proxy NoTypes) (Proxy :: Proxy NoContent) api
+
+
+
+writeJSCode :: Int -> IO ()
+writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantApi.js"
+    where
+        -- adds a Cache-Control header to the function, this results in:
+        -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
+        -- being added to all the JS functions
+        vanillaJSWithNoCache :: [Req NoContent] -> Text
+        vanillaJSWithNoCache xs = vanillaJSWith myOptions $ runIdentity $ mapM (reqHeaders (\xs -> Identity $ (HeaderArg (Arg (PathSegment "Cache-Control") NoContent)):xs)) xs
+        myOptions = defCommonGeneratorOptions{urlPrefix = "http://localhost:" <> show port, moduleName="exports"}
 
 
 main :: IO ()
 main = do
-    c <- readFile "Seq.calc"
-    r <- readFile "Seq.rules"
+    c <- readFile "calculi/Sequent.calc"
+    r <- readFile "calculi/Sequent.rules"
     config <- mkConfig c r
+    writeJSCode 8081
     run 8081 $ app config
 

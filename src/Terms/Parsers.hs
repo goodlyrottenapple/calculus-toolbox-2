@@ -256,15 +256,16 @@ class TermGrammar l k where
 
 instance TermGrammar 'FormulaL 'MetaK where
     grammarTerm = mdo
-        tableF  <- hTable formulaConns
-        lookupF <- lookupH formulaConns
-        metaA   <- grammarMeta ["f_","s_"]
-        metaF   <- grammarMeta ["a_","at_","s_"]
+        tableF      <- hTable formulaConns
+        lookupF     <- lookupH formulaConns
+        -- metaA   <- grammarMeta ["f_","s_"]
+        -- metaF   <- grammarMeta ["a_","at_","s_"]
+        reserved    <- mixfixParts
 
-        atomF   <- lift $ rule $ metaF
-                    <|> Lift <$> metaA
-                    <|> namedToken "(" *> exprF <* namedToken ")"
-        exprF   <- lift $ mixfixExpression tableF atomF (mkCon lookupF)
+        base        <- lift $ rule $ (Meta . toS) <$> satisfy (not . (`HS.member` reserved))
+        atomF       <- lift $ rule $ Lift <$> base
+                        <|> namedToken "(" *> exprF <* namedToken ")"
+        exprF       <- lift $ mixfixExpression tableF atomF (mkCon lookupF)
         return exprF
 
 
@@ -287,10 +288,7 @@ instance TermGrammar 'StructureL 'MetaK where
         lookupS <- lookupH structureConns
 
         exprF   <- grammarTerm
-        metaS   <- grammarMeta ["a_","at_","f_"]
-
-        atomS   <- lift $ rule $ metaS
-                    <|> Lift <$> exprF
+        atomS   <- lift $ rule $ Lift <$> exprF
                     <|> namedToken "(" *> exprS <* namedToken ")"
         exprS   <- lift $ mixfixExpression tableS atomS (mkCon lookupS)
         return exprS
@@ -379,45 +377,45 @@ splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
 
 
 parseRulesStrict :: Text -> CalcMErr x TermParseError [Rule Text]
-parseRulesStrict inStr = do
-    e <- ask
-    parse e $ (splitRules . toS) inStr
-    where
-        parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
-        parse _ [] = return []
-        parse e (r:rs) = do
-            r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-                ([] , rep) -> throwError $ TermParserError rep
-                (ps@(Rule{..}:_) , _)   -> do
-                    ps' <-  filterTypeable typeableRule ps
-                    case ps' of
-                        []  -> throwError $ RuleUntypeable name
-                        [p] -> return p
-                        _   -> throwError $ AmbiguousRuleParse ps'
-            rs' <- parse e rs
-            return $ r':rs'
+parseRulesStrict inStr = do undefined
+    -- e <- ask
+    -- parse e $ (splitRules . toS) inStr
+    -- where
+    --     parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
+    --     parse _ [] = return []
+    --     parse e (r:rs) = do
+    --         r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
+    --             ([] , rep) -> throwError $ TermParserError rep
+    --             (ps@(Rule{..}:_) , _)   -> do
+    --                 ps' <-  filterTypeable typeableRule ps
+    --                 case ps' of
+    --                     []  -> throwError $ RuleUntypeable name
+    --                     [p] -> return p
+    --                     _   -> throwError $ AmbiguousRuleParse ps'
+    --         rs' <- parse e rs
+    --         return $ r':rs'
 
 
 -- this version does not throw an error on ambiguous parse, 
 -- but choses the most general version of the rule
 parseRules :: Text -> CalcMErr x TermParseError [Rule Text]
-parseRules inStr = do
-    e <- ask
-    parse e $ (splitRules . toS) inStr
-    where
-        parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
-        parse _ [] = return []
-        parse e (r:rs) = do
-            r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-                ([] , rep) -> throwError $ TermParserError rep
-                (ps@(Rule{..}:_) , _)   -> do
-                    ps' <-  filterTypeable typeableRule ps
-                    case sort ps' of
-                        []    -> throwError $ RuleUntypeable name
-                        [p]   -> return p
-                        (p:_) -> return p
-            rs' <- parse e rs
-            return $ r':rs'
+parseRules inStr = do undefined
+    -- e <- ask
+    -- parse e $ (splitRules . toS) inStr
+    -- where
+    --     parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
+    --     parse _ [] = return []
+    --     parse e (r:rs) = do
+    --         r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
+    --             ([] , rep) -> throwError $ TermParserError rep
+    --             (ps@(Rule{..}:_) , _)   -> do
+    --                 ps' <-  filterTypeable typeableRule ps
+    --                 case sort ps' of
+    --                     []    -> throwError $ RuleUntypeable name
+    --                     [p]   -> return p
+    --                     (p:_) -> return p
+    --         rs' <- parse e rs
+    --         return $ r':rs'
 
 
 

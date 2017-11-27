@@ -1,8 +1,9 @@
 import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
+import { postApplicableRules } from './ServantApi.js'
 
-import { Dropdown, Modal, Header, Button, List } from 'semantic-ui-react'
+import { Dropdown, Modal, Button, List } from 'semantic-ui-react'
 
 export default class ProofTree extends Component {
   static defaultProps = {
@@ -45,15 +46,6 @@ export default class ProofTree extends Component {
     this.setState({addingRules: !this.state.addingRules })
   }
 
-  handleErrors(response) {
-    if (response.ok) {
-      return response.json();
-    }
-    var error = new Error()
-    error.data = response.json();
-    throw error;
-  }
-
   addAbove(r) {
     // console.log(r)
     const cs = r.sequents.map((r) => 
@@ -68,22 +60,12 @@ export default class ProofTree extends Component {
   }
 
   getPossibleRules() {
-    console.log(JSON.stringify(this.props.sequent.term))
-    fetch("http://localhost:8081/getApplicableRules", {
-      method: 'post',
-      body: JSON.stringify(this.props.sequent.term),
-      headers: {"Content-Type": "application/json"}
-    })
-      .then(this.handleErrors)
-      .then(data =>{
-          console.log(data)
-          this.setState({possibleRules: data })
-          this.toggleAddingRules()
-      })
-      
-      .catch(error => 
-        error.data.then(data => console.log(data))
-      );
+    const success = (data) => {
+      this.setState({possibleRules: data })
+      this.toggleAddingRules()
+    }
+    const error = (data) => console.log(data)
+    postApplicableRules(this.props.sequent.term, 'private', success, error)
   }
 
 
@@ -138,7 +120,7 @@ export default class ProofTree extends Component {
             <List.Content>{name}</List.Content>
           </List.Item>
           {rules.map((rule) => 
-            <List.Item>
+            <List.Item key={rule.latex}>
               <List.Content>
                 <KaTeXRenderer math={rule.latex} macros={this.props.macros}/>
               </List.Content>
