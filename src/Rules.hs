@@ -77,7 +77,7 @@ unifyC xs ys = foldr unifyFold (Just $ M.empty) (zipV xs ys)
 
 
 unifySeq :: (Ord a, Ord b) => DSequent 'MetaK a -> DSequent 'ConcreteK b -> Maybe (Map a (ConcreteTerm 'StructureL b))
-unifySeq (DSeq ml _ mr) (DSeq cl _ cr) = unifyC (ml @@ mr @@ nil) (cl @@ cr @@ nil)
+unifySeq (DSeq ml _ mr) (DSeq cl _ cr) = unifyC (ml :> mr :> Nil) (cl :> cr :> Nil)
 
 sub :: Ord a => Map a (ConcreteTerm l b) -> MetaTerm l a -> Maybe (ConcreteTerm l b)
 sub m (Meta x) = M.lookup x m

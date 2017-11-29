@@ -17,11 +17,13 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 {-# LANGUAGE TypeFamilies    #-}
 {-# LANGUAGE MultiParamTypeClasses    #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 
 module Lib.Prelude
     ( module Exports
-      , Length, Vec, vec, unVec, Copy, NotZ, nil, (@@), unconsV, eqLen, zipV, tlength
+      , Length, Vec, vec, Copy, NotZ, pattern Nil, pattern (:>), eqLen, zipV, tlength
       -- ,ElemAt, AppType(..)
       -- ,(!), Vec(..), toVec
     ) where
@@ -47,9 +49,14 @@ type family NotZ (n :: Nat) where
 
 
 
+newtype Vec (n :: Nat) a = Vec (Int, [a]) deriving (Eq, Show, Functor, Traversable)
 
-newtype Vec (n :: Nat) a = Vec (Int, [a]) deriving (Eq, Show, Functor, Foldable, Traversable)
+unVec :: Vec n a -> [a]
+unVec (Vec (_,xs)) = xs
 
+instance Foldable (Vec n) where
+  foldr f b vs = foldr f b (unVec vs)
+  toList = unVec
 
 tlength :: Foldable t => t a -> Maybe SomeNat
 tlength = someNatVal . toInteger . length
@@ -58,8 +65,6 @@ vec :: KnownNat n => Proxy n -> [a] -> Maybe (Vec n a)
 vec p v | (fromIntegral $ natVal p) == length v = Just $ Vec (length v, v)
         | otherwise = Nothing
 
-unVec :: Vec n a -> [a]
-unVec (Vec (_,xs)) = xs
 
 nil :: Vec 0 a
 nil = Vec (0, [])
@@ -68,11 +73,19 @@ unconsV :: (NotZ n ~ 'True) => Vec n a -> (a , Vec (n-1) a)
 unconsV (Vec (n, x:xs)) = (x, Vec (n-1, xs))
 unconsV _ = undefined
 
-infixr @@
+consV :: a -> Vec n a -> Vec (n+1) a
+consV x (Vec (n, xs)) = Vec (n+1, x:xs)
 
-(@@) :: a -> Vec n a -> Vec (n+1) a
-x @@ (Vec (n, xs)) = Vec (n+1, x:xs)
+pattern Nil :: Vec 0 a
+pattern Nil <- Vec (0, []) where
+  Nil = nil
 
+infixr :>
+
+pattern (:>) :: NotZ n ~ 'True =>
+  a -> Vec (n - 1) a -> Vec n a
+pattern x :> xs <- (unconsV -> (x,xs)) where
+  x :> xs = unsafeCoerce $ consV x xs
 
 zipV :: Vec n a -> Vec n b -> Vec n (a,b)
 zipV (Vec (n, as)) (Vec (_, bs)) = Vec $ (n , zip as bs)

@@ -48,7 +48,7 @@ import Data.Set(Set)
 
 -- import TH
 import GHC.TypeLits
--- import Unsafe.Coerce(unsafeCoerce)
+import Unsafe.Coerce(unsafeCoerce)
 import Data.Singletons.TH
 -- import Data.Tree
 -- import Data.Tree.Pretty
@@ -88,8 +88,8 @@ data TermKind = ConcreteK | MetaK
 
 data Term (l :: Level) (k :: TermKind) a where
     Base :: a -> Term 'AtomL 'ConcreteK a
-    Meta :: a -> Term l 'MetaK a
-    Lift :: Term (Lower l) k a -> Term l k a
+    Meta :: SingI l => a -> Term l 'MetaK a
+    Lift :: SingI l => Term (Lower l) k a -> Term l k a
     Con :: (KnownNat n, SingI l, IsAtom l ~ 'False) => -- this is a bit of a hack :/
         Conn l n -> Vec n (Term l k a) -> Term l k a 
 
@@ -117,7 +117,7 @@ instance Ord a => Ord (Term 'FormulaL 'MetaK a) where
     compare (Lift a) (Lift b) = compare a b
     compare (Lift _) (Meta _) = GT
     compare (Lift _) (Con _ _) = LT
-    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Meta _) = GT
     compare (Con _ _) (Lift _) = GT
 
@@ -129,7 +129,7 @@ instance Ord a => Ord (Term 'StructureL 'MetaK a) where
     compare (Lift a) (Lift b) = compare a b
     compare (Lift _) (Meta _) = GT
     compare (Lift _) (Con _ _) = LT
-    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Meta _) = GT
     compare (Con _ _) (Lift _) = GT
 
@@ -142,13 +142,13 @@ instance Ord a => Ord (Term 'AtomL 'ConcreteK a) where
 instance Ord a => Ord (Term 'FormulaL 'ConcreteK a) where
     compare (Lift a) (Lift b) = compare a b
     compare (Lift _) (Con _ _) = LT
-    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Lift _) = GT
  
 instance Ord a => Ord (Term 'StructureL 'ConcreteK a) where
     compare (Lift a) (Lift b) = compare a b
     compare (Lift _) (Con _ _) = LT
-    compare (Con _ vs) (Con _ us) = compare (unVec vs) (unVec us)
+    compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Lift _) = GT
  
 
@@ -311,8 +311,8 @@ runCalcErr :: FinTypeCalculusDescription r -> CalcMErr r e a -> Either e a
 runCalcErr env = runExcept . (\rT -> runReaderT rT env)
 
 
-runCalcState :: Monad m => FinTypeCalculusDescription r -> s -> CalcMT r (StateT s m) a -> m a
-runCalcState env s ma = liftM fst $ runStateT (runReaderT ma env) s
+-- runCalcState :: Monad m => FinTypeCalculusDescription r -> s -> CalcMT r (StateT s m) a -> m a
+-- runCalcState env s ma = liftM fst $ runStateT (runReaderT ma env) s
 
 
 
@@ -327,6 +327,15 @@ connMap f = do
     fConns <- asks f
     return $ M.fromList $ map (\c@ConnDescription{..} -> (connName, c)) fConns
 
+connMap' :: forall l r m. (Monad m, SingI l) => CalcMT r m (Map Text (ConnDescription l))
+connMap' = connMap'' (fromSing (sing :: Sing l))
+    where
+        connMap'' FormulaL = do 
+            m <- connMap formulaConns
+            return $ unsafeCoerce m
+        connMap'' StructureL = do 
+            m <- connMap structureConns
+            return $ unsafeCoerce m
 
 
 class TypeableCTerm l where
@@ -353,11 +362,11 @@ instance TypeableCTerm 'AtomL where
 
 instance TypeableCTerm 'FormulaL where
     typeableC' acc t (Lift a) = typeableC' acc t a
-    typeableC' acc t (Con (C c) vs) = typeableCon typeableC' formulaConns acc t c (unVec vs)
+    typeableC' acc t (Con (C c) vs) = typeableCon typeableC' formulaConns acc t c (toList vs)
 
 instance TypeableCTerm 'StructureL where
     typeableC' acc t (Lift a) = typeableC' acc t a
-    typeableC' acc t (Con (C c) vs) = typeableCon typeableC' structureConns acc t c (unVec vs)
+    typeableC' acc t (Con (C c) vs) = typeableCon typeableC' structureConns acc t c (toList vs)
 
 
 typeableC :: (Ord a, TypeableCTerm l) => CalcType -> 
@@ -429,8 +438,9 @@ instance TypeableMTerm 'AtomL where
 instance TypeableMTerm 'FormulaL where
     typeableM' _ _ _ (Meta _) = error "should not be reachable"
     typeableM' acc l t (Lift a) = typeableM' acc l t a
-    typeableM' acc _ t (Con (C c) vs) = typeableMCon typeableM' formulaConns acc FormulaL t c (unVec vs)
+    typeableM' acc _ t (Con (C c) vs) = typeableMCon typeableM' formulaConns acc FormulaL t c (toList vs)
 
+    fixMeta _ (Meta _) = error "should not be reachable"
     fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == FormulaL = return $ Meta a
     fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == AtomL = return $ Lift $ Meta a
     fixMeta acc (Lift (Meta a)) | otherwise = throwError $ LevelMismatch a FormulaL $ fst (acc M.! a)
@@ -442,8 +452,9 @@ instance TypeableMTerm 'FormulaL where
 instance TypeableMTerm 'StructureL where
     typeableM' _ _ _ (Meta _) = error "should not be reachable"
     typeableM' acc l t (Lift a) = typeableM' acc l t a
-    typeableM' acc l t (Con (C c) vs) = typeableMCon typeableM' structureConns acc StructureL t c (unVec vs)
+    typeableM' acc l t (Con (C c) vs) = typeableMCon typeableM' structureConns acc StructureL t c (toList vs)
 
+    fixMeta _ (Meta _) = error "should not be reachable"
     fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == StructureL = return $ Meta a
     fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == FormulaL = return $ Lift $ Meta a
     fixMeta acc (Lift (Lift (Meta a))) | fst (acc M.! a) == AtomL = return $ Lift $ Lift $ Meta a

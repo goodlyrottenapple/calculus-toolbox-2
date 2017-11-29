@@ -126,6 +126,7 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | MultipleDefaultTypes 
                             | SameNameConn Text
                             | SameParserSyntax Text Text
+                            | IncorrectNoOfArgs Text Int Int -- the number of holes differs from the number of args expected
                             | TypesNotDeclared (Set CalcType) deriving (Show, Generic, ToJSON)
 
 mkFinTypeCalculusDescription :: [CalcFileParse] -> Except CalculusDescParseError (FinTypeCalculusDescription ())
@@ -156,6 +157,7 @@ mkFinTypeCalculusDescription ps = do
         extractTypes ((CalcTypeP _ t):xs) = t:extractTypes xs
         extractTypes (_:xs) = extractTypes xs
 
+        noOfHoles = T.foldr (\c acc -> if c == '_' then acc+1 else acc) 0
         checkConns :: [CalcFileParse] -> Except CalculusDescParseError ()
         checkConns = checkConns' S.empty M.empty
             where
@@ -165,6 +167,8 @@ mkFinTypeCalculusDescription ps = do
                 checkConns' _    accS ((ConP _ n _ _ (s,_,_,_)):_)  | s `M.member` accS = 
                     throwError $ 
                         SameParserSyntax n (M.findWithDefault "error, this can't happen" s accS)
+                checkConns' accN accS ((ConP _ n ts _ (s,_,_,_)):xs) | length ts /= noOfHoles s = 
+                    throwError $ IncorrectNoOfArgs n (length ts) (noOfHoles s)
                 checkConns' accN accS ((ConP _ n _ _ (s,_,_,_)):xs) | otherwise = 
                     checkConns' (S.insert n accN) (M.insert s n accS) xs
                 checkConns' accN accS (_:xs) = checkConns' accN accS xs
@@ -207,7 +211,7 @@ holey xs       = Just i : holey rest
 
 
 
-grammarMeta :: [Text] -> CalcMT x (Grammar r) (Prod r P.String P.String (Term l 'MetaK Text))
+grammarMeta :: SingI l => [Text] -> CalcMT x (Grammar r) (Prod r P.String P.String (Term l 'MetaK Text))
 grammarMeta nPrefixes = mdo
     reserved <- mixfixParts
     lift $ rule $ (Meta . toS) <$> satisfy (\x -> 

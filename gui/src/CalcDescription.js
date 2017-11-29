@@ -50,15 +50,15 @@ export default class CalcDescription extends Component {
   }
   render() {
     const options = {
-      lineNumbers: true
+      lineNumbers: true,
+      lineWrapping: true
     };
     return (
 
       <Modal dimmer={'blurring'} open={this.props.open}>
         <Modal.Header>Modify the current calculus</Modal.Header>
         <Modal.Content image>
-          <Modal.Description>
-
+          <Modal.Description style={{'max-width':'100%'}}>
             <Form>
               <Form.Field>
                 <label>Calculus Name</label>

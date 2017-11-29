@@ -35,24 +35,118 @@ module Terms.JSON where
 import Terms
 import Lib.Prelude
 import Data.Aeson
+import Data.Singletons
 -- import qualified Prelude as P
 -- import Data.Singletons.TH
 -- import GHC.TypeLits
 import qualified Data.Text as T
+import qualified Data.Map as M
 
+import Text.Earley.Mixfix(Associativity(..))
 
 newtype LatexDSeq r k = LatexDSeq { unMk :: (FinTypeCalculusDescription r, DSequent k Text) }
 
 instance ToJSON (LatexDSeq r 'ConcreteK) where
-    toJSON (LatexDSeq (_, s@(DSeq l _ r))) = object [
-            "latex" .= (toJSON $ pprint l <> " \\vdash " <> pprint r) ,
-            "term" .= toJSON s
+    toJSON (LatexDSeq (d, s@(DSeq l _ r))) = object [
+            "latex" .= (toJSON $ runReader (pprint s) d) -- <> " \\vdash " <> pprint r) ,
+          , "term" .= toJSON s
         ]
+        -- where
+        --     pprint :: Term k 'ConcreteK Text -> Text
+        --     pprint (Base c) = c
+        --     pprint (Lift x) = pprint x
+        --     pprint (Con (C c) xs) = "\\seq" <> c <> (T.intercalate "" $ map (\x -> "{" <> pprint x <> "}") $ toList xs)
+
+
+
+getLevelT :: forall l k a. SingI l => Term l k a -> Level
+getLevelT _ = fromSing (sing :: Sing l) 
+
+
+
+getBinding :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Int
+getBinding (Base _) = return (maxBound :: Int)
+getBinding (Meta _) = return (maxBound :: Int)
+getBinding (Lift x) = getBinding x
+getBinding (Con (C c) _) = do
+    conns <- connMap' @l
+    let ConnDescription{..} = conns M.! c
+    return binding
+
+
+getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Associativity
+getAssoc (Base _) = return NonAssoc
+getAssoc (Meta _) = return NonAssoc
+getAssoc (Lift x) = getAssoc x
+getAssoc (Con (C c) _) = do
+    conns <- connMap' @l
+    let ConnDescription{..} = conns M.! c
+    return assoc
+
+
+class PPrint a where
+    pprint :: Monad m => a -> CalcMT r m Text
+
+
+instance PPrint Level where
+    pprint AtomL = return "A"
+    pprint FormulaL = return "F"
+    pprint StructureL = return "S"
+
+
+instance PPrint Text where
+    pprint = return
+instance PPrint a => PPrint (DSequent l a) where
+    pprint (DSeq l _ r) = do
+        pl <- pprint l
+        pr <- pprint r
+        return $ pl <> " \\vdash " <> pr
+
+instance PPrint a => PPrint (Term l k a) where
+    pprint t@(Meta a) = do
+        l <- pprint $ getLevelT t
+        pa <- pprint a
+        return $ "?_{" <> l <> "} " <> pa
+    pprint (Base a) = pprint a
+    pprint (Lift a) = pprint a
+    pprint x@(Con (C c) vs) = do
+        bnd <- getBinding x
+        ass <- getAssoc x
+        pprint' c bnd ass $ toList vs
         where
-            pprint :: Term k 'ConcreteK Text -> Text
-            pprint (Base c) = c
-            pprint (Lift x) = pprint x
-            pprint (Con (C c) xs) = "\\seq" <> c <> (T.intercalate "" $ map (\x -> "{" <> pprint x <> "}") $ unVec xs)
+            pprint' :: Monad m => Text -> Int -> Associativity -> [Term l k a] -> CalcMT r m Text
+            pprint' c _ _ [] =  return $ "\\seq" <> c
+            pprint' c bind _ [x] = do
+                px <- pprint x
+                bind' <- getBinding x
+                return $ 
+                    if bind > bind' then "\\seq" <> c <> "{(" <> px <> ")}" 
+                    else "\\seq" <> c <> "{" <> px <> "}"
+            pprint' c bind assoc [x,y] = do
+                px <- pprint x
+                py <- pprint y
+                bindx <- getBinding x
+                bindy <- getBinding y
+                assocx <- getAssoc x
+                assocy <- getAssoc y
+                let left = case (compare bind bindx, assoc, assocx) of
+                        (GT,_,_) -> "{(" <> px <> ")}"
+                        (LT,_,_) -> "{" <> px <> "}"
+                        (EQ,LeftAssoc,RightAssoc) -> "{(" <> px <> ")}"
+                        (EQ,RightAssoc,RightAssoc) -> "{(" <> px <> ")}"
+                        (EQ,_,_) -> "{" <> px <> "}"
+                    right = case (compare bind bindy, assoc, assocy) of
+                        (GT,_,_) -> "{(" <> py <> ")}"
+                        (LT,_,_) -> "{" <> py <> "}"
+                        (EQ,LeftAssoc,LeftAssoc) -> "{(" <> py <> ")}"
+                        (EQ,RightAssoc,LeftAssoc) -> "{(" <> py <> ")}"
+                        (EQ,_,_) -> "{" <> py <> "}"
+                return $ "\\seq" <> c <> left <> right
+
+            pprint' c bind _ xs = do
+                pxs <- mapM pprint xs
+                return $ "\\seq" <> c <> (T.intercalate "" $ map (\x -> "{" <> x <> "}") pxs)
+
 
 
 newtype Macros = Macros (Map Text Text) deriving (Generic, ToJSON)
@@ -63,86 +157,3 @@ data CalcDesc = CalcDesc {
   , rawCalc :: Text 
   , rawRules :: Text 
 } deriving (Generic, ToJSON, FromJSON)
-
--- -- calcName :: forall name l n as p b. KnownSymbol name => HomCon name l n as p b -> Text
--- -- calcName _ = toS $ symbolVal (Proxy :: Proxy name)
-
-
--- type family Fst (t :: (k,k)) where
---     Fst '(x,y) = x
-
--- type family Snd (t :: (k,k)) where
---     Snd '(x,y) = y
-
--- getParserSymbol :: forall name l n as p b ltx. KnownSymbol p => HomCon name l n as p b ltx -> Text
--- getParserSymbol _ = toS $ symbolVal (Proxy :: Proxy p)
-
--- getNoOfArgs :: forall name l n as p b ltx. KnownNat n => HomCon name l n as p b ltx -> Int
--- getNoOfArgs _ = fromIntegral $ natVal (Proxy :: Proxy n)
-
--- getFixity :: forall name l n as p b ltx. SingI as => HomCon name l n as p b ltx -> Terms.Fixity
--- getFixity _ = fromSing (sing :: Sing as)
-
--- getLevelT :: forall v l m a. SingI l => Term v l m a -> Level
--- getLevelT _ = fromSing (sing :: Sing l) 
-
--- getBinding :: forall name l n as p b ltx. KnownNat b => HomCon name l n as p b ltx -> Int
--- getBinding _ = fromIntegral $ natVal (Proxy :: Proxy b)
-
--- latexName :: forall name l n as p b ltx. KnownSymbol (Fst ltx) => HomCon name l n as p b ltx -> Text
--- latexName _ = toS $ symbolVal (Proxy :: Proxy (Fst ltx))
-
--- latexDef :: forall name l n as p b ltx. KnownSymbol (Snd ltx) => HomCon name l n as p b ltx -> Text
--- latexDef _ = toS $ symbolVal (Proxy :: Proxy (Snd ltx))
-
-
--- class PPrint a where
---     pprint :: a -> Text
---     mkTree :: a -> Tree Text
-
-
--- instance PPrint Char where
---     pprint x = toS [x]
---     mkTree x = Node (pprint x) []
-
--- instance PPrint Text where
---     pprint = identity 
---     mkTree x = Node x []
-
--- instance KnownSymbol p => PPrint (HomCon name l n as p b ltx) where
---     pprint c = getParserSymbol c
---     mkTree = undefined
-
--- instance PPrint Level where
---     pprint AtomL = "A"
---     pprint FormulaL = "F"
---     pprint StructureL = "S"
---     mkTree = undefined
-
-
-
--- instance (PPrint a) => PPrint (Term v l m a) where
---     pprint t@(MetaV a) = "?" <> (pprint $ getLevelT t) <> " " <> pprint a
---     pprint (Base a) = pprint a
---     pprint (Lift a) = pprint a
---     pprint (HomC c Nil) = pprint c
---     pprint (HomC c (x@(HomC _ _) :> Nil)) = pprint c <> " (" <> pprint x <> ")"
---     pprint (HomC c (x :> Nil)) = pprint c <> " " <> pprint x
---     pprint (HomC c (x@(HomC _ _) :> y :> Nil)) | getFixity c == Terms.InfixL = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x@(HomC _ _) :> y :> Nil)) | getFixity c == Terms.InfixR = "(" <> pprint x <> ")" <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x :> y@(HomC _ _) :> Nil)) | getFixity c == Terms.InfixR = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c (x :> y@(HomC _ _) :> Nil)) | getFixity c == Terms.InfixL = pprint x <> " " <> pprint c <> " " <> "(" <> pprint y <> ")"
---     pprint (HomC c (x :> y :> Nil)) | getFixity c /= Terms.Prefix = pprint x <> " " <> pprint c <> " " <> pprint y
---     pprint (HomC c ts) = (pprint c) <> (T.intercalate " " $ toList $ map pprint ts)
-
---     mkTree t@(MetaV a) = Node "?" [mkTree a]
---     mkTree (Base a) = Node (pprint a) []
---     mkTree t@(Lift a) = Node (pprint $ getLevelT t) [mkTree a]
---     mkTree (HomC c ts) = Node (pprint c) (map mkTree $ toList ts)
-
-
--- pprintTree :: PPrint a => a -> Text
--- pprintTree a = toS $ drawVerticalTree $ map toS $ mkTree a
-
--- class MkHomCon v c where
---     mkHomCon :: Text -> [Term v c m a] -> Maybe (Term v c m a)
