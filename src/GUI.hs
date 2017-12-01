@@ -9,7 +9,8 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE FlexibleContexts      #-}
-
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE DeriveFunctor      #-}
 
 module GUI where
 
@@ -34,13 +35,14 @@ import Rules
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Control.Monad.Except
-
+import Control.Monad.Reader
 import Text.Earley
 
 data GUIError = CalculusDescriptionNotLoaded
               -- | TermParseE TermParseError
-              | Custom Text deriving (Generic, ToJSON)
+              | Custom Text deriving (Show, Generic, ToJSON)
 
+deriving instance Exception GUIError 
 
 data Status = Success deriving (Generic, ToJSON)
 
@@ -67,135 +69,120 @@ newtype Config r = Config {
 }
 
 
-type AppM r = ReaderT (Config r) IO
+newtype AppM r a = AppM { runAppM :: Config r -> IO a } deriving Functor
+
+instance Applicative (AppM r) where
+    pure a = AppM $ \_ -> return a
+    fab <*> fa = AppM $ \c -> 
+        let ioab = runAppM fab c in ioab <*> (runAppM fa c)
 
 
-getCaclDesc :: AppM r (FinTypeCalculusDescription r)
-getCaclDesc = do
-    cRef <- asks currentCalcDec
-    cd <- liftIO $ readIORef cRef
-    case cd of 
-        Just (_, CalDescStore{..}) -> return parsed
-        Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
 
-putCaclDesc :: Text -> Text -> Text -> FinTypeCalculusDescription r -> AppM r ()
-putCaclDesc name rawCalc rawRules parsed = do
-    cRef <- asks currentCalcDec
-    liftIO $ writeIORef cRef $ Just (name, CalDescStore{..})
-
-liftErrAppM :: ToJSON e => Except e a -> AppM r a
-liftErrAppM x = do
-    case runExcept x of
-        Left err -> throwIO $ err300 {errBody = encode err}
-        Right res -> return res
-     
+instance Monad (AppM r) where
+    return a = AppM $ \_ -> return a
+    ma >>= amb = AppM $ \c -> do
+        a <- runAppM ma c
+        runAppM (amb a) c
 
 
-liftCalcErrAppM :: ToJSON e => CalcMErr r e a -> AppM r a
-liftCalcErrAppM cmerr = do
-    cd <- getCaclDesc
-    case runCalcErr cd cmerr of
-        Left err -> throwIO $ err300 {errBody = encode err}
-        Right res -> return res
+instance MonadIO (AppM r) where
+    liftIO ioa = AppM (\_ -> ioa)
+
+instance MonadThrowJSON (AppM r) where
+    throw e = throwIO $ err300 {errBody = encode e }
+
+instance MonadThrowJSON IO where
+    throw e = throwIO e
+
+
+instance MonadState (Text, CalDescStore (FinTypeCalculusDescription r)) (AppM r) where
+    put cds = AppM (\Config{..} -> writeIORef currentCalcDec $ Just cds)
+    get = AppM (\Config{..} -> do
+        r <- readIORef currentCalcDec
+        case r of 
+            Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
+            Just res -> return res)
+
+
+-- instance MonadReader (FinTypeCalculusDescription r) (AppM r) where
+--     ask = AppM (\Config{..} -> do
+--         r <- readIORef currentCalcDec
+--         case r of 
+--             Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
+--             Just (_, CalDescStore{..}) -> return parsed)
+
+
+-- since we use an ioref, the AppM is not really a Reader, because the value of 
+-- the calculus description could change arbitrarily mid-computation, especially if there are
+-- multiple accesses by different threads?? the following function should ensure that the calculus
+-- description at least stays consistent throughout the computation, i.e. ask will always 
+-- return the same value inside the freeze block
+freeze :: MonadState (Text, CalDescStore r) m => ReaderT r m a -> m a
+freeze m = do
+    (_, CalDescStore{..}) <- get
+    runReaderT m parsed 
+
+instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
+    throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
+
 
 parseDSeqH :: Maybe Text -> AppM r (LatexDSeq r 'ConcreteK)
-parseDSeqH (Just inStr) = do
-    cd <- getCaclDesc
-    -- liftIO $ putStrLn $ "got: " <> inStr
-    r <- liftCalcErrAppM $ parseCDSeq inStr
+parseDSeqH (Just inStr) = freeze $ do
+    r <- parseCDSeq inStr
+    cd <- ask
     return $ LatexDSeq (cd,r)
 parseDSeqH Nothing = throwIO $ err300 {errBody = "No input given"} -- redo this properly??
 
 
 getMacrosH :: AppM r Macros
-getMacrosH = liftCalcErrAppM getMacros
-    where
-        getMacros :: CalcMErr r () Macros
-        getMacros = do
-            fconns <- asks formulaConns
-            sconns <- asks structureConns
-            return $ Macros $ M.fromList $ 
-                (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) fconns) ++
-                (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns)
+getMacrosH = freeze $ do
+    fconns <- asks formulaConns
+    sconns <- asks structureConns
+    return $ Macros $ M.fromList $ 
+        (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) fconns) ++
+        (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns)
 
 
 
 getApplicableRulesH :: DSequent 'ConcreteK Text -> AppM [Rule Text] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
-getApplicableRulesH dseq = do
-    cd <- getCaclDesc
-    -- liftIO $ print $ rules cd
-    r <- foldrM (fun cd) M.empty (rules cd)
-    return $ M.toList r
-    where
-        fun :: FinTypeCalculusDescription r -> Rule Text -> Map RuleName [LatexDSeq r 'ConcreteK] -> AppM [Rule Text] (Map RuleName [LatexDSeq r 'ConcreteK])
-        fun cd r@Rule{..} m = do
-            -- liftIO $ print $ name
-            -- liftIO $ print $ unifySeq concl dseq
-            -- liftIO $ print $ prems
-            -- liftIO $ print $ do { udict <- unifySeq concl dseq ; mapM (\(DSeq l _ _) -> sub udict l) prems }
-            -- liftIO $ print $ do { udict <- unifySeq concl dseq ; mapM (\(DSeq _ _ r) -> sub udict r) prems }
-            -- liftIO $ print $ ("------------" :: Text)
-            case isApplicable r dseq of
-                Just ps -> return $ M.insert name (map (\s -> LatexDSeq (cd,s)) ps) m
-                Nothing -> return m
+getApplicableRulesH dseq = freeze $ do
+    cd <- ask
+    -- print cd
+    r <- getApplicableRules dseq
+    -- print r
+    return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
+
 
 
 getCaclDescH :: AppM r CalcDesc
 getCaclDescH = do
-    cRef <- asks currentCalcDec
-    cd <- liftIO $ readIORef cRef
-    case cd of 
-        Just (name, CalDescStore{..}) -> return $ CalcDesc name rawCalc rawRules
-        Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
+    (name, CalDescStore{..}) <- get
+    return $ CalcDesc name rawCalc rawRules
+
 
 
 setCaclDescH :: CalcDesc -> AppM [Rule Text] Status
 setCaclDescH CalcDesc{..} = do
-    cd <- liftErrAppM $ parseFinTypeCalculusDescription rawCalc
-    -- rules <- liftErrAppM $ runReaderT (parseRules rawRules) cd
-    rules <- parse cd $ (splitRules . toS) rawRules
+    cd <- parseFinTypeCalculusDescription rawCalc
+    rules <- runReaderT (parseRules rawRules) cd
 
-    putCaclDesc name rawCalc rawRules cd{rules = rules}
+    put (name , CalDescStore cd{rules = rules} rawCalc rawRules)
     -- write the calc to a file
     liftIO $ writeFile ("./calculi/" ++ toS name ++ ".calc") rawCalc
     liftIO $ writeFile ("./calculi/" ++ toS name ++ ".rules") rawRules
     return GUI.Success
 
-    where
-        parse :: FinTypeCalculusDescription x -> [[Char]] -> ReaderT (Config [Rule Text]) IO [Rule Text]  
-        -- parse :: FinTypeCalculusDescription x -> [[Char]] -> ReaderT (Config [Rule Text]) IO ()
-        parse _ [] = return []
-        parse e (r:rs) = do
-            r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-                ([] , rep) -> throwIO $ err300 {errBody = encode $ TermParserError rep} 
-                (prules , rep) -> do
-                    -- print prules
-                    prulesMetaMap <- liftCalcErrAppM $ mapM typeableRule prules
-                    fixed <- liftCalcErrAppM $ mapM (\(m,r) -> fixRule m r)(zip prulesMetaMap prules)
-                    case fixed of
-                        []  -> throwIO $ err300 {errBody = encode $ RuleUntypeable name}
-                        [p] -> do
-                            print p
-                            return p 
-                        ps' -> throwIO $ err300 {errBody = encode $ AmbiguousRuleParse ps'}
-            -- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-            --     ([] , rep) -> throwIO $ err300 {errBody = encode $ TermParserError rep} 
-            --     (ps@(Rule{..}:_) , _)   -> do
-            --         ps' <-  liftCalcErrAppM @() $ filterTypeable typeableRule ps
-            --         print $ length ps'
-            --         case sort ps' of
-            --             []    -> throwIO $ err300 {errBody = encode $ RuleUntypeable name}
-            --             [p]   -> return p
-            --             (p:_) -> return p
-            rs' <- parse e rs
-                -- parse e rs
-            return $ r':rs'
+
+type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] Int
+         :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] Status
+         :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] ()
+
 
 
 
 
 ioToHandler :: Config r -> AppM r :~> Handler
-ioToHandler cfg = NT $ \x -> Handler . ExceptT . try $ runReaderT x cfg
+ioToHandler cfg = NT $ \x -> Handler . ExceptT . try $ runAppM x cfg
 
 
 readerServer :: Config [Rule Text] -> Server API
@@ -217,11 +204,20 @@ app cfg = myCors (serve api (readerServer cfg))
 
 
 
+
+instance MonadThrowJSON (ReaderT x IO) where
+    throw = throwIO
+
+runCalcIO :: forall r a. FinTypeCalculusDescription r -> CalcMT r IO a -> IO a
+runCalcIO env = \rT -> runReaderT rT env
+
+
+-- this hack needs to go at some point??
 mkConfig :: Text -> Text -> IO (Config [Rule Text])
 mkConfig rawCalc rawRules = do
-    let (Right c) = runExcept $ parseFinTypeCalculusDescription rawCalc
-        (Right rs) = runCalcErr c (parseRules rawRules)
-        parsed = c{rules = rs}
+    c <- parseFinTypeCalculusDescription rawCalc
+    rs <- runCalcIO c (parseRules rawRules)
+    let parsed = c{rules = rs}
     currentCalcDec <- newIORef $ Just ("Sequent", CalDescStore{..})
     return Config{..}
 
@@ -233,7 +229,7 @@ test = listFromAPI (Proxy :: Proxy NoTypes) (Proxy :: Proxy NoContent) api
 writeJSCode :: Int -> IO ()
 writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantApi.js"
     where
-        -- adds a Cache-Control header to the function, this results in:
+        -- adds a Cache-Control header to the generator options, which results in
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
         -- being added to all the JS functions
         vanillaJSWithNoCache :: [Req NoContent] -> Text

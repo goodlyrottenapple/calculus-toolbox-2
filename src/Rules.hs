@@ -11,6 +11,7 @@ For more information on how to write Haddock comments check the user guide:
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Rules where
 
@@ -21,11 +22,12 @@ import qualified Prelude as P
 import Data.Aeson
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
+-- import Control.Monad.Catch(MonadThrowJSON(..))
 
 data PT a = PT {
     premises :: [PT a]
   , ruleName :: Text
-  , conclusion :: PT a
+  , conclusion :: a
 }
 
 instance ToJSON a => ToJSON (PT a) where
@@ -36,7 +38,7 @@ instance ToJSON a => ToJSON (PT a) where
             ]
         ]
 
-instance FromJSON (PT a) where
+instance FromJSON a => FromJSON (PT a) where
     parseJSON = withObject "proof tree" $ \o ->
         case  HM.keys o of 
             [r]-> do 
@@ -109,11 +111,38 @@ isApplicable Rule{..} dseq = do
     udict <- unifySeq concl dseq
     mapM (subSeq udict) prems
 
--- getApplicableRules :: (Ord b, Monad m) => DSequent 'ConcreteK b -> 
---     CalcMT [Rule Text] m (Map RuleName [DSequent 'ConcreteK b])
--- getApplicableRules dseq = do
---     rs <- asks rules
---     return $ foldr (\r@Rule{..} m -> case isApplicable r dseq of {
---         Just ps -> M.insert name ps m;
---         Nothing -> m}) M.empty rs
+
+getApplicableRules :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) => DSequent 'ConcreteK b -> 
+    m (Map RuleName [DSequent 'ConcreteK b])
+getApplicableRules dseq = do
+    rs <- asks rules
+    return $ foldr (\r@Rule{..} m -> case isApplicable r dseq of {
+        Just ps -> M.insert name ps m;
+        Nothing -> m}) M.empty rs
+
+
+findProof :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
+    Int -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
+findProof 0 _ = return []
+findProof n s = do
+    appM <- getApplicableRules s
+    aux1 s $ M.toList appM
+
+    where
+        aux1 :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
+            DSequent 'ConcreteK b -> [(RuleName, [DSequent 'ConcreteK b])] -> m [PT (DSequent 'ConcreteK b)]
+        aux1 c [] = return []
+        aux1 c ((nm,ps):xs) = do
+            x <- aux c nm ps
+            xs' <- aux1 c xs
+            return $ x ++ xs'
+
+        aux :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
+            DSequent 'ConcreteK b -> RuleName -> [DSequent 'ConcreteK b] -> m [PT (DSequent 'ConcreteK b)]
+        aux c nm [] = return $ [PT [] nm c]
+        aux c nm (p:ps) = do
+            pPts <- findProof (n-1) p
+            psPts <- aux c nm ps
+            return $ concat $ map (\p -> map (\(PT ps nm c) -> PT (p:ps) nm c) psPts) pPts
+
 

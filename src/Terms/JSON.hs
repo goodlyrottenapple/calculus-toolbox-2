@@ -77,7 +77,7 @@ getBinding (Con (C c) _) = do
 getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Associativity
 getAssoc (Base _) = return NonAssoc
 getAssoc (Meta _) = return NonAssoc
-getAssoc (Lift x) = getAssoc x
+getAssoc (Lift x) = return NonAssoc
 getAssoc (Con (C c) _) = do
     conns <- connMap' @l
     let ConnDescription{..} = conns M.! c

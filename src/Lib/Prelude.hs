@@ -22,7 +22,7 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 
 
 module Lib.Prelude
-    ( module Exports
+    ( module Exports, MonadThrowJSON(..)
       , Length, Vec, vec, Copy, NotZ, pattern Nil, pattern (:>), eqLen, zipV, tlength
       -- ,ElemAt, AppType(..)
       -- ,(!), Vec(..), toVec
@@ -31,6 +31,8 @@ module Lib.Prelude
 import Protolude as Exports
 import GHC.TypeLits
 import Unsafe.Coerce(unsafeCoerce)
+
+import Data.Aeson
 
 type family Length (l :: [k]) where
     Length '[] = 0
@@ -47,7 +49,8 @@ type family NotZ (n :: Nat) where
     NotZ n = 'True
 
 
-
+class Monad m => MonadThrowJSON m where
+  throw :: (ToJSON e, Exception e) => e -> m a
 
 newtype Vec (n :: Nat) a = Vec (Int, [a]) deriving (Eq, Show, Functor, Traversable)
 
@@ -71,7 +74,7 @@ nil = Vec (0, [])
 
 unconsV :: (NotZ n ~ 'True) => Vec n a -> (a , Vec (n-1) a)
 unconsV (Vec (n, x:xs)) = (x, Vec (n-1, xs))
-unconsV _ = undefined
+unconsV _ = error "should not be reachable"
 
 consV :: a -> Vec n a -> Vec (n+1) a
 consV x (Vec (n, xs)) = Vec (n+1, x:xs)

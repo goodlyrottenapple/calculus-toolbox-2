@@ -48,6 +48,8 @@ import qualified Data.Set as S
 import Data.Aeson
 
 import Text.Regex (splitRegex, mkRegex)
+-- import Control.Monad.Catch
+
 
 deriving instance Generic (Report P.String [P.String])
 deriving instance ToJSON (Report P.String [P.String])
@@ -127,9 +129,11 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | SameNameConn Text
                             | SameParserSyntax Text Text
                             | IncorrectNoOfArgs Text Int Int -- the number of holes differs from the number of args expected
-                            | TypesNotDeclared (Set CalcType) deriving (Show, Generic, ToJSON)
+                            | TypesNotDeclared (Set CalcType) deriving (Show, Generic, ToJSON, Typeable)
 
-mkFinTypeCalculusDescription :: [CalcFileParse] -> Except CalculusDescParseError (FinTypeCalculusDescription ())
+deriving instance Exception CalculusDescParseError
+
+mkFinTypeCalculusDescription :: MonadThrowJSON m => [CalcFileParse] -> m (FinTypeCalculusDescription ())
 mkFinTypeCalculusDescription ps = do
     defaultType <- onlyOneDefault ps
     let types = S.fromList $ extractTypes ps
@@ -147,10 +151,10 @@ mkFinTypeCalculusDescription ps = do
     return $ Description{..}
 
     where
-        onlyOneDefault :: [CalcFileParse] -> Except CalculusDescParseError CalcType
+        -- onlyOneDefault :: [CalcFileParse] -> Except CalculusDescParseError CalcType
         onlyOneDefault prs = case filter (\x -> case x of {(CalcTypeP True _) -> True ; _ -> False}) prs of
             [CalcTypeP True t] -> return t
-            _ -> throwError MultipleDefaultTypes
+            _ -> throw MultipleDefaultTypes
 
         extractTypes :: [CalcFileParse] -> [CalcType]
         extractTypes [] = []
@@ -158,29 +162,29 @@ mkFinTypeCalculusDescription ps = do
         extractTypes (_:xs) = extractTypes xs
 
         noOfHoles = T.foldr (\c acc -> if c == '_' then acc+1 else acc) 0
-        checkConns :: [CalcFileParse] -> Except CalculusDescParseError ()
+        -- checkConns :: [CalcFileParse] -> Except CalculusDescParseError ()
         checkConns = checkConns' S.empty M.empty
             where
                 checkConns' _    _    [] = return ()
                 checkConns' accN _    ((ConP _ n _ _ _):_)        | n `S.member` accN = 
-                    throwError $ SameNameConn n
+                    throw $ SameNameConn n
                 checkConns' _    accS ((ConP _ n _ _ (s,_,_,_)):_)  | s `M.member` accS = 
-                    throwError $ 
+                    throw $ 
                         SameParserSyntax n (M.findWithDefault "error, this can't happen" s accS)
                 checkConns' accN accS ((ConP _ n ts _ (s,_,_,_)):xs) | length ts /= noOfHoles s = 
-                    throwError $ IncorrectNoOfArgs n (length ts) (noOfHoles s)
+                    throw $ IncorrectNoOfArgs n (length ts) (noOfHoles s)
                 checkConns' accN accS ((ConP _ n _ _ (s,_,_,_)):xs) | otherwise = 
                     checkConns' (S.insert n accN) (M.insert s n accS) xs
                 checkConns' accN accS (_:xs) = checkConns' accN accS xs
 
 
-        mkConnDescription :: CalcType -> Set CalcType -> 
-            Text -> [Maybe CalcType] -> Maybe CalcType -> Text -> Associativity -> Int -> Text -> 
-            Except CalculusDescParseError (ConnDescription l)
+        -- mkConnDescription :: CalcType -> Set CalcType -> 
+        --     Text -> [Maybe CalcType] -> Maybe CalcType -> Text -> Associativity -> Int -> Text -> 
+        --     Except CalculusDescParseError (ConnDescription l)
         mkConnDescription defaultType types n ts t prs a b latex = 
             if (S.fromList $ outType:inTypes) `S.isSubsetOf` types then 
                 return $ ConnDescription{..}
-            else throwError $ TypesNotDeclared $ types S.\\ (S.fromList $ outType:inTypes)
+            else throw $ TypesNotDeclared $ types S.\\ (S.fromList $ outType:inTypes)
             where
                 connName = n
                 inTypes = map (fromMaybe defaultType) ts
@@ -191,12 +195,12 @@ mkFinTypeCalculusDescription ps = do
                 latexSyntax = latex
 
 
-parseFinTypeCalculusDescription :: Text -> Except CalculusDescParseError (FinTypeCalculusDescription ())
+parseFinTypeCalculusDescription :: MonadThrowJSON m => Text -> m (FinTypeCalculusDescription ())
 parseFinTypeCalculusDescription t = 
     case fullParses (parser $ grammarFinTypeCalculusDesc) $ tokenize $ toS t of
         ([p] , _) -> mkFinTypeCalculusDescription p
-        ([]  , r) -> throwError $ CalcDescParserError r
-        (_   , r) -> throwError $ AmbiguousCalcDescParse r -- this should hopefully not happen
+        ([]  , r) -> throw $ CalcDescParserError r
+        (_   , r) -> throw $ AmbiguousCalcDescParse r -- this should hopefully not happen
 
 
 
@@ -317,14 +321,16 @@ data TermParseError = TermParserError (Report P.String [P.String])
                     | TermUntypeable (TypeableError Text)
                     | RuleUntypeable Text deriving (Show, Generic, ToJSON)
 
-parseTerm :: forall l k x. (TermGrammar l k) => Text -> 
-    CalcMErr x TermParseError (Term l k Text)
-parseTerm inStr = do
-    e <- ask
-    case fullParses (parser $ runReaderT grammarTerm e) $ tokenize $ toS inStr of
-        ([p] , _) -> return p
-        ([] , r) -> throwError $ TermParserError r
-        (_ , r) -> throwError $ AmbiguousTermParse r
+instance Exception TermParseError
+
+-- parseTerm :: forall l k x. (TermGrammar l k) => Text -> 
+--     CalcMErr x TermParseError (Term l k Text)
+-- parseTerm inStr = do
+--     e <- ask
+--     case fullParses (parser $ runReaderT grammarTerm e) $ tokenize $ toS inStr of
+--         ([p] , _) -> return p
+--         ([] , r) -> throwError $ TermParserError r
+--         (_ , r) -> throwError $ AmbiguousTermParse r
 
 
 
@@ -341,22 +347,31 @@ grammarDSeq = mdo
 
 
 
-liftExcept :: CalcMErr x e a -> (e -> e') -> CalcMErr x e' a
-liftExcept m f = do
-    env <- ask
-    case runCalcErr env m of 
-        Left err -> throwError $ f err
-        Right x -> return x
+-- liftExcept :: CalcMErr x e a -> (e -> e') -> CalcMErr x e' a
+-- liftExcept m f = do
+--     env <- ask
+--     case runCalcErr env m of 
+--         Left err -> throwError $ f err
+--         Right x -> return x
 
-parseCDSeq :: Text -> CalcMErr x TermParseError (DSequent 'ConcreteK Text)
+
+-- liftExcept :: (MonadError e m , MonadError e' m) => m a -> (e -> e') -> m a
+-- liftExcept m f = do
+--     env <- ask
+--     case runCalcErr env m of 
+--         Left err -> throwError $ f err
+--         Right x -> return x
+
+parseCDSeq :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+    Text -> m (DSequent 'ConcreteK Text)
 parseCDSeq inStr = do
     e <- ask
     case fullParses (parser $ runReaderT grammarDSeq e) $ tokenize $ toS inStr of
         ([p] , _) -> do
-            _ <- typeableCDSeq' M.empty p`liftExcept` TermUntypeable
+            _ <- typeableCDSeq' M.empty p
             return p
-        ([] , r) -> throwError $ TermParserError r
-        (_ , r) -> throwError $ AmbiguousTermParse r
+        ([] , r) -> throw $ TermParserError r
+        (_ , r) -> throw $ AmbiguousTermParse r
 
 
 
@@ -380,8 +395,8 @@ splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
         emptyString = (\x -> x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n"))
 
 
-parseRulesStrict :: Text -> CalcMErr x TermParseError [Rule Text]
-parseRulesStrict inStr = do undefined
+-- parseRulesStrict :: Text -> CalcMErr x TermParseError [Rule Text]
+-- parseRulesStrict inStr = do undefined
     -- e <- ask
     -- parse e $ (splitRules . toS) inStr
     -- where
@@ -402,32 +417,34 @@ parseRulesStrict inStr = do undefined
 
 -- this version does not throw an error on ambiguous parse, 
 -- but choses the most general version of the rule
-parseRules :: Text -> CalcMErr x TermParseError [Rule Text]
-parseRules inStr = do undefined
-    -- e <- ask
-    -- parse e $ (splitRules . toS) inStr
-    -- where
-    --     parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
-    --     parse _ [] = return []
-    --     parse e (r:rs) = do
-    --         r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-    --             ([] , rep) -> throwError $ TermParserError rep
-    --             (ps@(Rule{..}:_) , _)   -> do
-    --                 ps' <-  filterTypeable typeableRule ps
-    --                 case sort ps' of
-    --                     []    -> throwError $ RuleUntypeable name
-    --                     [p]   -> return p
-    --                     (p:_) -> return p
-    --         rs' <- parse e rs
-    --         return $ r':rs'
+parseRules :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+    Text -> m [Rule Text]
+parseRules str = parse $ (splitRules . toS) str
+    where
+        parse :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+            [P.String] -> m [Rule Text]
+        parse [] = return []
+        parse (r:rs) = do
+            cd <- ask
+            r' <- case fullParses (parser $ runReaderT grammarRule cd) $ tokenize $ r of
+                ([] , rep) -> throw $ TermParserError rep
+                (prules@(Rule{..}:_) , _) -> do
+                    prulesMetaMap <- (mapM typeableRule prules)
+                    fixed <- (mapM (\(m,r) -> fixRule m r) $ zip prulesMetaMap prules)
+                    case fixed of
+                        []  -> throw $ RuleUntypeable name
+                        [p] -> return p 
+                        ps' -> throw $ AmbiguousRuleParse ps'
+            rs' <- parse rs
+            return $ r':rs'
 
 
 
 
-testP :: IO (Either TermParseError [Rule Text])
-testP = do
-    cd <- readFile "DEAK.calc"
-    let (Right calcDesc) = runExcept $ parseFinTypeCalculusDescription cd
-    r <- readFile "DEAK.rules"
-    return $ runCalcErr calcDesc $ parseRules r
+-- testP :: IO (Either TermParseError [Rule Text])
+-- testP = do
+--     cd <- readFile "DEAK.calc"
+--     let (Right calcDesc) = runExcept $ parseFinTypeCalculusDescription cd
+--     r <- readFile "DEAK.rules"
+--     return $ runCalcErr calcDesc $ parseRules r
 

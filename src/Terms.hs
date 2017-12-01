@@ -57,6 +57,7 @@ import Data.Aeson
 -- import Data.Data
 
 import Text.Earley.Mixfix(Associativity)
+-- import Control.Monad.Catch
 
 
 -- import Data.Vector(Vector)
@@ -108,7 +109,7 @@ instance Eq a => Eq (Term l k a) where
 
 instance Ord a => Ord (Term 'AtomL 'MetaK a) where
     compare (Meta a) (Meta b) = compare a b
-    compare _ _ = undefined
+    compare _ _ = error "should not be reachable"
 
 instance Ord a => Ord (Term 'FormulaL 'MetaK a) where
     compare (Meta a) (Meta b) = compare a b
@@ -136,7 +137,7 @@ instance Ord a => Ord (Term 'StructureL 'MetaK a) where
 
 instance Ord a => Ord (Term 'AtomL 'ConcreteK a) where
     compare (Base a) (Base b) = compare a b
-    compare _ _ = undefined
+    compare _ _ = error "should not be reachable"
 
 
 instance Ord a => Ord (Term 'FormulaL 'ConcreteK a) where
@@ -211,14 +212,14 @@ mkCon :: (IsAtom l ~ 'False, SingI l, StringConv s Text, Ord t, IsString s) =>
     Map t s -> t -> [Term l k a] -> Term l k a
 mkCon d h xs = case tlength xs of
     (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C $ toS $ M.findWithDefault "???" h d) vs
-    _ -> undefined -- this can't happen...like, everrr...
+    _ -> error "should not be reachable" -- this can't happen...like, everrr...
 
 
 unsafeMkCon :: (IsAtom l ~ 'False, SingI l) =>
     Text -> [Term l k a] -> Term l k a
 unsafeMkCon c xs = case tlength xs of
     (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C c) vs
-    _ -> undefined -- this can't happen...like, everrr...
+    _ -> error "should not be reachable" -- this can't happen...like, everrr...
 
 
 
@@ -304,11 +305,9 @@ data Rule a = Rule {
 
 
 type CalcMT r m = ReaderT (FinTypeCalculusDescription r) m
-type CalcMErr r e = CalcMT r (Except e)
-type CalcM r = CalcMT r Identity
+-- type CalcMErr r e = CalcMT r (Except e)
+-- type CalcM r = CalcMT r Identity
 
-runCalcErr :: FinTypeCalculusDescription r -> CalcMErr r e a -> Either e a
-runCalcErr env = runExcept . (\rT -> runReaderT rT env)
 
 
 -- runCalcState :: Monad m => FinTypeCalculusDescription r -> s -> CalcMT r (StateT s m) a -> m a
@@ -319,8 +318,9 @@ runCalcErr env = runExcept . (\rT -> runReaderT rT env)
 data TypeableError a = TypeMismatch a CalcType CalcType 
                      | LevelMismatch a Level Level
                      | TypeMismatchCon Text CalcType CalcType
-                       deriving (Show, Generic, ToJSON)
+                       deriving (Typeable, Show, Generic, ToJSON)
 
+instance (Show a, Typeable a) => Exception (TypeableError a)
 
 connMap :: MonadReader r m => (r -> [ConnDescription t]) -> m (Map Text (ConnDescription t))
 connMap f = do
@@ -339,11 +339,12 @@ connMap' = connMap'' (fromSing (sing :: Sing l))
 
 
 class TypeableCTerm l where
-    typeableC' :: Ord a => Map a CalcType -> CalcType -> Term l 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
+    typeableC' :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m, Ord a, Show a, Typeable a, ToJSON a) => 
+        Map a CalcType -> CalcType -> Term l 'ConcreteK a -> m (Map a CalcType)
 
 
 
-typeableCon :: (MonadReader d m, MonadError (TypeableError a) m) =>
+typeableCon :: (MonadReader d m, MonadThrowJSON m) =>
      (map -> CalcType -> trm -> m map) -> (d -> [ConnDescription l]) -> map -> CalcType -> Text -> [trm] -> m map
 typeableCon tyF f acc t c xs = do
     conns <- connMap f
@@ -351,14 +352,14 @@ typeableCon tyF f acc t c xs = do
     if t == outType then do
         let tsxs = zip inTypes xs 
         foldrM (\(t', x) acc' -> tyF acc' t' x) acc tsxs
-    else throwError $ TypeMismatchCon c t outType
+    else throw $ TypeMismatchCon @() c t outType
 
 
 instance TypeableCTerm 'AtomL where
     typeableC' acc t (Base a) = if a `M.member` acc then
-        let t' = acc M.! a in if t == t' then return $ acc else throwError $ TypeMismatch a t t'
+        let t' = acc M.! a in if t == t' then return $ acc else throw $ TypeMismatch a t t'
         else return $ M.insert a t acc
-    typeableC' _ _ (Lift _) = undefined
+    typeableC' _ _ (Lift _) = error "should not be reachable"
 
 instance TypeableCTerm 'FormulaL where
     typeableC' acc t (Lift a) = typeableC' acc t a
@@ -369,12 +370,13 @@ instance TypeableCTerm 'StructureL where
     typeableC' acc t (Con (C c) vs) = typeableCon typeableC' structureConns acc t c (toList vs)
 
 
-typeableC :: (Ord a, TypeableCTerm l) => CalcType -> 
-    Term l 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
+typeableC :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m, Ord a, Show a, Typeable a, ToJSON a, TypeableCTerm l) => CalcType -> 
+    Term l 'ConcreteK a -> m (Map a CalcType)
 typeableC = typeableC' M.empty
 
 
-typeableCDSeq' :: Ord a => Map a CalcType -> DSequent 'ConcreteK a -> CalcMErr r (TypeableError a) (Map a CalcType)
+typeableCDSeq' :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m, Ord a, Show a, Typeable a, ToJSON a) => 
+    Map a CalcType -> DSequent 'ConcreteK a -> m (Map a CalcType)
 typeableCDSeq' acc (DSeq l t r) = do
     lacc <- typeableC' acc t l
     typeableC' lacc t r
@@ -392,16 +394,16 @@ typeableCDSeq' acc (DSeq l t r) = do
 -- Map Text (Level, CalcType)
 
 class TypeableMTerm l where
-    typeableM' :: Map Text (Level, CalcType) -> Level -> CalcType -> Term l 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
-    fixMeta :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> Term l 'MetaK Text -> m (Term l 'MetaK Text)
+    typeableM' :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => Map Text (Level, CalcType) -> Level -> CalcType -> Term l 'MetaK Text -> m (Map Text (Level, CalcType))
+    fixMeta :: (MonadThrowJSON m) => Map Text (Level, t) -> Term l 'MetaK Text -> m (Term l 'MetaK Text)
 
-typeableMeta :: (MonadError (TypeableError Text) m) => 
+typeableMeta :: (MonadThrowJSON m) => 
     Map Text (Level, CalcType) -> Level -> CalcType -> Text -> m (Map Text (Level, CalcType))
 typeableMeta acc l t v = 
     if v `M.member` acc then
         let (_, t') = acc M.! v in case t == t' of
             True  -> return $ insert v t l acc
-            False -> throwError $ TypeMismatch v t t'
+            False -> throw $ TypeMismatch v t t'
     else return $ insert v t l acc
 
     where
@@ -414,7 +416,7 @@ typeableMeta acc l t v =
         insert iv it il iacc = M.insert iv (il, it) iacc
 
 
-typeableMCon :: (MonadReader d m, MonadError (TypeableError a) m) =>
+typeableMCon :: (MonadReader d m, MonadThrowJSON m) =>
      (map -> Level -> CalcType -> trm -> m map) -> (d -> [ConnDescription l]) -> map -> Level -> CalcType -> Text -> [trm] -> m map
 typeableMCon tyF f acc l t c xs = do
     conns <- connMap f
@@ -422,17 +424,17 @@ typeableMCon tyF f acc l t c xs = do
     if t == outType then do
         let tsxs = zip inTypes xs 
         foldrM (\(t', x) acc' -> tyF acc' l t' x) acc tsxs
-    else throwError $ TypeMismatchCon c t outType
+    else throw $ TypeMismatchCon @() c t outType
 
 
 
 instance TypeableMTerm 'AtomL where
     typeableM' acc l t (Meta a) = typeableMeta acc l t a
-    typeableM' _ _ _ (Lift _) = undefined
+    typeableM' _ _ _ (Lift _) = error "should not be reachable"
 
     fixMeta acc (Meta a) | fst (acc M.! a) == AtomL = return $ Meta a
-    fixMeta acc (Meta a) | otherwise = throwError $ LevelMismatch a AtomL $ fst (acc M.! a)
-    fixMeta _ (Lift _) = undefined
+    fixMeta acc (Meta a) | otherwise = throw $ LevelMismatch a AtomL $ fst (acc M.! a)
+    fixMeta _ (Lift _) = error "should not be reachable"
 
 
 instance TypeableMTerm 'FormulaL where
@@ -443,7 +445,7 @@ instance TypeableMTerm 'FormulaL where
     fixMeta _ (Meta _) = error "should not be reachable"
     fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == FormulaL = return $ Meta a
     fixMeta acc (Lift (Meta a)) | fst (acc M.! a) == AtomL = return $ Lift $ Meta a
-    fixMeta acc (Lift (Meta a)) | otherwise = throwError $ LevelMismatch a FormulaL $ fst (acc M.! a)
+    fixMeta acc (Lift (Meta a)) | otherwise = throw $ LevelMismatch a FormulaL $ fst (acc M.! a)
     fixMeta acc (Con c vs) = do
         vs' <- mapM (fixMeta acc) vs
         return $ Con c vs'
@@ -466,30 +468,31 @@ instance TypeableMTerm 'StructureL where
         return $ Con c vs'
 
 
-typeableM :: (TypeableMTerm l) => CalcType -> 
-    Term l 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+typeableM :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m, TypeableMTerm l) => CalcType -> 
+    Term l 'MetaK Text -> m (Map Text (Level, CalcType))
 typeableM = typeableM' M.empty StructureL
 
 
-typeableMDSeq' :: Map Text (Level, CalcType) -> DSequent 'MetaK Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+typeableMDSeq' :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+    Map Text (Level, CalcType) -> DSequent 'MetaK Text -> m (Map Text (Level, CalcType))
 typeableMDSeq' acc (DSeq l t r) = do
     lacc <- typeableM' acc StructureL t l
     typeableM' lacc StructureL t r
 
-fixMDSeq :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> DSequent 'MetaK Text -> m (DSequent 'MetaK Text)
+fixMDSeq :: (MonadThrowJSON m) => Map Text (Level, t) -> DSequent 'MetaK Text -> m (DSequent 'MetaK Text)
 fixMDSeq acc (DSeq l t r) = do
     l' <- fixMeta acc l
     r' <- fixMeta acc r
     return $ DSeq l' t r'
 
 
-typeableRule :: Rule Text -> CalcMErr r (TypeableError Text) (Map Text (Level, CalcType))
+typeableRule :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => Rule Text -> m (Map Text (Level, CalcType))
 typeableRule Rule{..} = do
     conclAcc <- typeableMDSeq' M.empty concl
     foldrM (\dseq acc -> typeableMDSeq' acc dseq) conclAcc prems
 
 
-fixRule :: (MonadError (TypeableError Text) m) => Map Text (Level, t) -> Rule Text -> m (Rule Text)
+fixRule :: (MonadThrowJSON m) => Map Text (Level, t) -> Rule Text -> m (Rule Text)
 fixRule acc Rule{..} = do
     concl' <- fixMDSeq acc concl
     prems' <- mapM (fixMDSeq acc) prems
