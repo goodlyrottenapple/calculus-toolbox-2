@@ -1,10 +1,15 @@
 .codeArea {
 	border: 1px solid rgba(34,36,38,.15);
     border-radius: 5px;
+
 }
 
 .codeArea > div {
     border-radius: 4px;
+    font-family: 'Fira Code';
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+  	-webkit-font-smoothing: antialiased;
+  	text-rendering: optimizeLegibility;
     /*border-top-left-radius: 4px;*/
 }
 

@@ -55,10 +55,10 @@ export default class CalcDescription extends Component {
     };
     return (
 
-      <Modal dimmer={'blurring'} open={this.props.open}>
+      <Modal size={'fullscreen'} dimmer={'blurring'} open={this.props.open}>
         <Modal.Header>Modify the current calculus</Modal.Header>
         <Modal.Content image>
-          <Modal.Description style={{'max-width':'100%'}}>
+          <Modal.Description style={{maxWidth:'100%'}}>
             <Form>
               <Form.Field>
                 <label>Calculus Name</label>
