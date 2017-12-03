@@ -12,6 +12,7 @@ For more information on how to write Haddock comments check the user guide:
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Rules where
 
@@ -28,7 +29,7 @@ data PT a = PT {
     premises :: [PT a]
   , ruleName :: Text
   , conclusion :: a
-}
+} deriving (Show, Functor)
 
 instance ToJSON a => ToJSON (PT a) where
     toJSON (PT xs r c) = object [
@@ -41,7 +42,7 @@ instance ToJSON a => ToJSON (PT a) where
 instance FromJSON a => FromJSON (PT a) where
     parseJSON = withObject "proof tree" $ \o ->
         case  HM.keys o of 
-            [r]-> do 
+            [r] -> do 
                 pt <- (.:) @(HM.HashMap Text Value) o r
                 ps <- pt .: "premises"
                 c <- pt .: "conclusion"

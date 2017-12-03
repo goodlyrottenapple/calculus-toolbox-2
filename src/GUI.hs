@@ -11,6 +11,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE TupleSections      #-}
 
 module GUI where
 
@@ -38,6 +39,9 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Text.Earley
 
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+
 data GUIError = CalculusDescriptionNotLoaded
               -- | TermParseE TermParseError
               | Custom Text deriving (Show, Generic, ToJSON)
@@ -48,10 +52,11 @@ data Status = Success deriving (Generic, ToJSON)
 
 
 type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
-         :<|> "macros" :> Get '[JSON] Macros
-         :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
-         :<|> "calcDesc" :> Get '[JSON] CalcDesc
-         :<|> "calcDesc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] Status
+      :<|> "macros" :> Get '[JSON] Macros
+      :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+      :<|> "calcDesc" :> Get '[JSON] CalcDesc
+      :<|> "calcDesc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] Status
+      :<|> ProofSearchAPI
 
 
 api :: Proxy API
@@ -64,9 +69,81 @@ data CalDescStore c = CalDescStore {
   , rawRules :: Text
 }
 
-newtype Config r = Config {
-    currentCalcDec :: IORef (Maybe (Text, CalDescStore (FinTypeCalculusDescription r)))
+type PTDSeq = PT (DSequent 'ConcreteK Text)
+type LatexPTDSeq = PT (LatexDSeq [Rule Text] 'ConcreteK)
+
+data Config r = Config {
+    currentCalcDec :: IORef (Text, CalDescStore (FinTypeCalculusDescription r))
+  , psQueue :: IORef (IntMap (Either ThreadId (Maybe PTDSeq)))
+  , psQueueCounter :: IORef Int
 }
+
+
+getQueue :: AppM r (IORef (IntMap (Either ThreadId (Maybe PTDSeq))))
+getQueue = AppM $ \Config{..} -> return psQueue
+
+getIntoQueue :: AppM r Int
+getIntoQueue = AppM $ \Config{..} ->
+    atomicModifyIORef' psQueueCounter $ \i -> (i+1 , i)
+
+enqueuePS :: Int -> IORef (IntMap (Either ThreadId (Maybe PTDSeq))) -> IO ()
+enqueuePS i psQueue = do
+    tid <- myThreadId
+    atomicModifyIORef' psQueue $ \m -> 
+        case IntMap.lookup i m of
+            Nothing -> (IntMap.insert i (Left tid) m, ())
+            Just _  -> (m, ()) -- if i has already been set, then ps finished before we atomically set the threadId
+
+
+enqueueResult :: IORef (IntMap (Either ThreadId (Maybe PTDSeq))) -> Int -> Maybe PTDSeq -> IO ()
+enqueueResult ref i pt = do
+    -- print "adding result"
+    atomicModifyIORef' ref $ \m -> (IntMap.insert i (Right pt) m, ())
+
+
+cancelPS :: Int -> AppM r ()
+cancelPS i = AppM $ \Config{..} -> do
+    v <- atomicModifyIORef' psQueue $ \m -> case IntMap.lookup i m of
+      Just (Left tid) -> (IntMap.delete i m, Just tid)
+      _ -> (m , Nothing)
+    case v of
+        Just tid -> killThread tid
+        -- Nothing -> ?? This has been canceled already... or the thread hadnt been added to the IntMap yet??
+        Nothing -> return () -- thread has finished and stored the result in the map
+    -- print $ ("cancelled ps for: " <> show i :: Text)
+
+runPS :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
+runPS dseq = do
+    (_, CalDescStore{..}) <- get
+    q <- getQueue
+    qi <- getIntoQueue
+    _ <- liftIO $ forkFinally (do
+        enqueuePS qi q
+        r <- liftM (head . take 1) $ runReaderT (findProof 10 dseq) parsed
+        print r
+        return r) (handleRes q qi)
+    -- enqueuePS qi tid
+    -- print ("returning " <> show qi :: Text)
+    return qi
+    where
+        handleRes _ _ (Left e) = throwIO e -- could instead store the excpetion in the intmap??
+        handleRes qref qi (Right r) = do
+            enqueueResult qref qi r
+
+
+tryDequeue :: Int -> AppM r (Maybe PTDSeq)
+tryDequeue i = AppM $ \Config{..} -> do
+    -- print ("trying dequeue for " <> show i :: Text)
+    atomicModifyIORef' psQueue $ \m -> 
+        case IntMap.lookup i m of
+            Nothing -> (m, Nothing)
+            Just (Left _)  -> (m, Nothing)
+            Just (Right res) -> (IntMap.delete i m, res)
+    -- print ("finish dequeue" <> show r :: Text)
+    -- case r of 
+    --     Nothing -> return $ []
+    --     Just r -> return $ [r]
+
 
 
 newtype AppM r a = AppM { runAppM :: Config r -> IO a } deriving Functor
@@ -96,20 +173,9 @@ instance MonadThrowJSON IO where
 
 
 instance MonadState (Text, CalDescStore (FinTypeCalculusDescription r)) (AppM r) where
-    put cds = AppM (\Config{..} -> writeIORef currentCalcDec $ Just cds)
-    get = AppM (\Config{..} -> do
-        r <- readIORef currentCalcDec
-        case r of 
-            Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
-            Just res -> return res)
+    put cds = AppM $ \Config{..} -> writeIORef currentCalcDec $ cds
+    get = AppM $ \Config{..} -> readIORef currentCalcDec
 
-
--- instance MonadReader (FinTypeCalculusDescription r) (AppM r) where
---     ask = AppM (\Config{..} -> do
---         r <- readIORef currentCalcDec
---         case r of 
---             Nothing -> throwIO $ err500 {errBody = encode CalculusDescriptionNotLoaded}
---             Just (_, CalDescStore{..}) -> return parsed)
 
 
 -- since we use an ioref, the AppM is not really a Reader, because the value of 
@@ -174,11 +240,28 @@ setCaclDescH CalcDesc{..} = do
 
 
 type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] Int
-         :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] Status
-         :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] ()
+                 :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] ()
+                 :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] [LatexPTDSeq]
 
 
+launchPSH :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
+launchPSH = runPS 
 
+cancelPSH :: Int -> AppM [Rule Text] ()
+cancelPSH = cancelPS
+
+queryPSResultH :: Int -> AppM [Rule Text] [LatexPTDSeq]
+queryPSResultH i = do
+    r <- tryDequeue i
+    case r of 
+        Nothing -> return []
+        Just r -> do
+            (_, CalDescStore{..}) <- get
+            return [map (LatexDSeq . (parsed,)) r]
+
+
+serverPS :: ServerT ProofSearchAPI (AppM [Rule Text])
+serverPS = launchPSH :<|> cancelPSH :<|> queryPSResultH
 
 
 ioToHandler :: Config r -> AppM r :~> Handler
@@ -190,9 +273,10 @@ readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
 server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH 
+    :<|> serverPS
 
 myCors :: Middleware
-myCors = cors (const $ Just customPolicy)
+myCors = cors $ const $ Just customPolicy
     where
         customPolicy = 
             simpleCorsResourcePolicy { corsRequestHeaders = ["Content-Type", "Cache-Control"] }
@@ -218,11 +302,13 @@ mkConfig rawCalc rawRules = do
     c <- parseFinTypeCalculusDescription rawCalc
     rs <- runCalcIO c (parseRules rawRules)
     let parsed = c{rules = rs}
-    currentCalcDec <- newIORef $ Just ("Sequent", CalDescStore{..})
+    psQueue <- newIORef $ IntMap.empty
+    currentCalcDec <- newIORef $ ("Sequent", CalDescStore{..})
+    psQueueCounter <- newIORef 1 -- js is stupid, so we start from 1
     return Config{..}
 
 
-test = listFromAPI (Proxy :: Proxy NoTypes) (Proxy :: Proxy NoContent) api
+-- test = listFromAPI (Proxy :: Proxy NoTypes) (Proxy :: Proxy NoContent) api
 
 
 

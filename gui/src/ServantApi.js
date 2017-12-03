@@ -110,3 +110,72 @@ exports.postCalcDesc = function(body, headerCacheControl, onSuccess, onError) {
   };
   xhr.send(JSON.stringify(body));
 };
+
+exports.postLaunchPS = function(body, headerCacheControl, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'http://localhost:8081/launchPS', true);
+  xhr.setRequestHeader("Cache-Control", headerCacheControl);
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function () {
+    var res = null;
+    if (xhr.readyState === 4) {
+      if (xhr.status === 204 || xhr.status === 205) {
+        onSuccess();
+      } else if (xhr.status >= 200 && xhr.status < 300) {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onSuccess(res);
+      } else {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onError(res);
+      }
+    }
+  };
+  xhr.send(JSON.stringify(body));
+};
+
+exports.postCancelPS = function(body, headerCacheControl, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'http://localhost:8081/cancelPS', true);
+  xhr.setRequestHeader("Cache-Control", headerCacheControl);
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function () {
+    var res = null;
+    if (xhr.readyState === 4) {
+      if (xhr.status === 204 || xhr.status === 205) {
+        onSuccess();
+      } else if (xhr.status >= 200 && xhr.status < 300) {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onSuccess(res);
+      } else {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onError(res);
+      }
+    }
+  };
+  xhr.send(JSON.stringify(body));
+};
+
+exports.postQueryPSResult = function(body, headerCacheControl, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'http://localhost:8081/queryPSResult', true);
+  xhr.setRequestHeader("Cache-Control", headerCacheControl);
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function () {
+    var res = null;
+    if (xhr.readyState === 4) {
+      if (xhr.status === 204 || xhr.status === 205) {
+        onSuccess();
+      } else if (xhr.status >= 200 && xhr.status < 300) {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onSuccess(res);
+      } else {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onError(res);
+      }
+    }
+  };
+  xhr.send(JSON.stringify(body));
+};

@@ -1,9 +1,9 @@
 import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
-import { postApplicableRules } from './ServantApi.js'
+import { postApplicableRules, postLaunchPS, postCancelPS, postQueryPSResult } from './ServantApi.js'
 
-import { Dropdown, Modal, Button, List } from 'semantic-ui-react'
+import { Dropdown, Modal, Button, List, Header, Icon, Loader, Dimmer } from 'semantic-ui-react'
 
 export default class ProofTree extends Component {
   static defaultProps = {
@@ -12,7 +12,8 @@ export default class ProofTree extends Component {
       latex : ''
     },
     rule: '',
-    macros: {}
+    macros: {},
+    children : []
   }
 
   constructor(props) {
@@ -23,12 +24,18 @@ export default class ProofTree extends Component {
       rule: props.rule,
       // macros: props.macros,
       addingRules: false,
+      psId: 0,
+      doingPS: false,
       possibleRules: [],
-      children: []
+      children: props.children
     }
     this.deleteAbove = this.deleteAbove.bind(this)  
     this.getPossibleRules = this.getPossibleRules.bind(this)  
+    this.runPS = this.runPS.bind(this)  
+    this.cancelPS = this.cancelPS.bind(this)  
+    this.pollPS = this.pollPS.bind(this)  
     this.toggleAddingRules = this.toggleAddingRules.bind(this)  
+    this.toggleDoingPS = this.toggleDoingPS.bind(this)  
   }
 
 
@@ -37,13 +44,17 @@ export default class ProofTree extends Component {
       sequent: nextProps.sequent, 
       rule: nextProps.rule,
       possibleRules: [],
-      children: []
+      children: nextProps.children
     })
   }
 
 
   toggleAddingRules() {
     this.setState({addingRules: !this.state.addingRules })
+  }
+
+  toggleDoingPS() {
+    this.setState({doingPS: !this.state.doingPS })
   }
 
   addAbove(r) {
@@ -68,7 +79,66 @@ export default class ProofTree extends Component {
     postApplicableRules(this.props.sequent.term, 'private', success, error)
   }
 
+  runPS() {
+    this.toggleDoingPS()
+    const success = (data) => {
+      console.log(data)
+      this.setState({psId: data})
+      this.pollPS()
+    }
+    const error = (data) => console.log(data)
+    postLaunchPS(this.props.sequent.term, 'private', success, error)
+  }
 
+  pollPS() {
+    const success = (data) => {
+      if(data.length === 0) {
+        // console.log("got nothing")
+        if(this.state.doingPS) setTimeout(this.pollPS, 500);
+      }
+      else if(data.length === 1){
+        // console.log(data);
+        this.toggleDoingPS();
+        this.deleteAbove();
+
+        const r = Object.keys(data[0])[0];
+        // console.log(r);
+        // console.log(data[0]);
+        const cs = data[0][r].premises.map((p) => this.mkPT(p))
+        this.setState({rule: r, children: cs})
+
+        // a /\ b /\ c /\ d |- a /\ b /\ c
+      } else {
+        console.log("error!"+ data)
+      }
+    }
+    const error = (data) => console.log(data)
+    postQueryPSResult(this.state.psId, 'private', success, error)
+  }
+
+  mkPT(pt) {
+    const r = Object.keys(pt)[0];
+    const concl = pt[r].conclusion;
+    const cs = pt[r].premises.map((c) => this.mkPT(c))
+    return (<ProofTree macros={this.props.macros} sequent={concl} rule={r} children={cs} />)
+
+  }
+
+  cancelPS() {
+    this.toggleDoingPS()
+    const success = (data) => {
+      console.log(data)
+    }
+    const error = (data) => console.log(data)
+    postCancelPS(this.state.psId, 'private', success, error)
+  }
+
+
+  // componentWillMount() {
+  //   for (var i = this.state.children.length - 1; i >= 0; i--) {
+  //     console.log(this.state.children[i].concl)
+  //   }
+  // }
 
   render() {
     if(this.props.sequent.latex === '') return null;
@@ -93,7 +163,7 @@ export default class ProofTree extends Component {
 
 
     const Concl = (
-      <KaTeXRenderer math={this.props.sequent.latex} macros={this.props.macros}/>
+      <KaTeXRenderer ref={(node) => {this.concl = node}} math={this.props.sequent.latex} macros={this.props.macros}/>
     )
 
     const Menu = (
@@ -106,7 +176,7 @@ export default class ProofTree extends Component {
           <Dropdown.Item onClick={this.deleteAbove}>
             Delete above
           </Dropdown.Item>
-          <Dropdown.Item>
+          <Dropdown.Item onClick={this.runPS}>
             Proof Search
           </Dropdown.Item>
         </Dropdown.Menu>
@@ -126,7 +196,8 @@ export default class ProofTree extends Component {
               </List.Content>
             </List.Item>)}
         </List>
-      </Button>)
+      </Button>
+    )
 
     const addAboveModal =(
       <Modal dimmer={'blurring'} open={this.state.addingRules}>
@@ -143,39 +214,38 @@ export default class ProofTree extends Component {
         </Modal.Actions>
       </Modal>
     )
-    
 
+    const psModal = (
+      <Modal dimmer={'blurring'} open={this.state.doingPS} basic size='small'>
+        <Modal.Content>
+          <Loader size='huge'>Searching for a proof</Loader>
+        </Modal.Content>
+        <div style={{margin: 'auto'}}>
+          <Button basic color='red' inverted onClick={this.cancelPS}>
+            <Icon name='remove' /> Cancel Search
+          </Button>
+        </div>
+      </Modal>
+    )
    
-
     return (
       <table>
         <tbody>
           <tr>
             {Pts}
-            
           </tr>
           <tr>
             <td colSpan={span} align="center">
-
-                <div className="ruleBar">
-                {Menu}
-                <span className="ruleTag">{this.state.rule}</span>
-                </div>
-
+              <div className="ruleBar">
+              {Menu}
+              <span className="ruleTag">{this.state.rule}</span>
+              </div>
               {addAboveModal}
+              {psModal}
             </td>
-            
           </tr>
         </tbody>
       </table>
     )
   }
 }
-
-
-
- // <td rowSpan={2} valign="bottom">
- //              <span className="ruleTag">
- //                {this.state.rule}
- //              </span>
- //            </td>
