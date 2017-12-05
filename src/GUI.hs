@@ -1,52 +1,53 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE StandaloneDeriving      #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE DeriveFunctor      #-}
-{-# LANGUAGE TupleSections      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeOperators         #-}
 
 module GUI where
 
-import Lib.Prelude
-import Network.Wai
-import Network.Wai.Handler.Warp
+import           Lib.Prelude
+import           Network.Wai
+import           Network.Wai.Handler.Warp
 
-import Network.Wai.Middleware.Cors
+import           Network.Wai.Middleware.Cors
 
-import Servant
-import Servant.JS
+import           Servant
+import           Servant.JS
 -- import           Servant.Foreign
+import           Data.Aeson
+import           Data.IORef
 import           Servant.JS.Internal
-import Data.IORef
-import Data.Aeson
 
-import Terms
-import Terms.Parsers
-import Terms.JSON
-import Rules
+import           Rules
+import           Terms
+import           Terms.JSON
+import           Terms.Parsers
 
-import qualified Data.Map as M
-import qualified Data.Text as T
-import Control.Monad.Except
-import Control.Monad.Reader
-import Text.Earley
+import           Data.IntMap.Strict          (IntMap)
+import qualified Data.IntMap.Strict          as IntMap
+import qualified Data.Map                    as M
 
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
+-- import qualified Data.Text as T
+-- import Control.Monad.Except
+-- import Control.Monad.Reader
+-- import Text.Earley
+
 
 data GUIError = CalculusDescriptionNotLoaded
               -- | TermParseE TermParseError
               | Custom Text deriving (Show, Generic, ToJSON)
 
-deriving instance Exception GUIError 
+deriving instance Exception GUIError
 
 data Status = Success deriving (Generic, ToJSON)
 
@@ -64,8 +65,8 @@ api = Proxy
 
 
 data CalDescStore c = CalDescStore {
-    parsed :: c
-  , rawCalc :: Text
+    parsed   :: c
+  , rawCalc  :: Text
   , rawRules :: Text
 }
 
@@ -74,7 +75,7 @@ type LatexPTDSeq = PT (LatexDSeq [Rule Text] 'ConcreteK)
 
 data Config r = Config {
     currentCalcDec :: IORef (Text, CalDescStore (FinTypeCalculusDescription r))
-  , psQueue :: IORef (IntMap (Either ThreadId (Maybe PTDSeq)))
+  , psQueue        :: IORef (IntMap (Either ThreadId (Maybe PTDSeq)))
   , psQueueCounter :: IORef Int
 }
 
@@ -89,7 +90,7 @@ getIntoQueue = AppM $ \Config{..} ->
 enqueuePS :: Int -> IORef (IntMap (Either ThreadId (Maybe PTDSeq))) -> IO ()
 enqueuePS i psQueue = do
     tid <- myThreadId
-    atomicModifyIORef' psQueue $ \m -> 
+    atomicModifyIORef' psQueue $ \m ->
         case IntMap.lookup i m of
             Nothing -> (IntMap.insert i (Left tid) m, ())
             Just _  -> (m, ()) -- if i has already been set, then ps finished before we atomically set the threadId
@@ -105,11 +106,11 @@ cancelPS :: Int -> AppM r ()
 cancelPS i = AppM $ \Config{..} -> do
     v <- atomicModifyIORef' psQueue $ \m -> case IntMap.lookup i m of
       Just (Left tid) -> (IntMap.delete i m, Just tid)
-      _ -> (m , Nothing)
+      _               -> (m , Nothing)
     case v of
         Just tid -> killThread tid
         -- Nothing -> ?? This has been canceled already... or the thread hadnt been added to the IntMap yet??
-        Nothing -> return () -- thread has finished and stored the result in the map
+        Nothing  -> return () -- thread has finished and stored the result in the map
     -- print $ ("cancelled ps for: " <> show i :: Text)
 
 runPS :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
@@ -119,7 +120,7 @@ runPS dseq = do
     qi <- getIntoQueue
     _ <- liftIO $ forkFinally (do
         enqueuePS qi q
-        r <- liftM (head . take 1) $ runReaderT (findProof 10 dseq) parsed
+        r <- liftM (head . take 1) $ runReaderT (findProof 0 10 dseq) parsed
         print r
         return r) (handleRes q qi)
     -- enqueuePS qi tid
@@ -134,13 +135,13 @@ runPS dseq = do
 tryDequeue :: Int -> AppM r (Maybe PTDSeq)
 tryDequeue i = AppM $ \Config{..} -> do
     -- print ("trying dequeue for " <> show i :: Text)
-    atomicModifyIORef' psQueue $ \m -> 
+    atomicModifyIORef' psQueue $ \m ->
         case IntMap.lookup i m of
-            Nothing -> (m, Nothing)
-            Just (Left _)  -> (m, Nothing)
+            Nothing          -> (m, Nothing)
+            Just (Left _)    -> (m, Nothing)
             Just (Right res) -> (IntMap.delete i m, res)
     -- print ("finish dequeue" <> show r :: Text)
-    -- case r of 
+    -- case r of
     --     Nothing -> return $ []
     --     Just r -> return $ [r]
 
@@ -150,7 +151,7 @@ newtype AppM r a = AppM { runAppM :: Config r -> IO a } deriving Functor
 
 instance Applicative (AppM r) where
     pure a = AppM $ \_ -> return a
-    fab <*> fa = AppM $ \c -> 
+    fab <*> fa = AppM $ \c ->
         let ioab = runAppM fab c in ioab <*> (runAppM fa c)
 
 
@@ -178,15 +179,15 @@ instance MonadState (Text, CalDescStore (FinTypeCalculusDescription r)) (AppM r)
 
 
 
--- since we use an ioref, the AppM is not really a Reader, because the value of 
+-- since we use an ioref, the AppM is not really a Reader, because the value of
 -- the calculus description could change arbitrarily mid-computation, especially if there are
 -- multiple accesses by different threads?? the following function should ensure that the calculus
--- description at least stays consistent throughout the computation, i.e. ask will always 
+-- description at least stays consistent throughout the computation, i.e. ask will always
 -- return the same value inside the freeze block
 freeze :: MonadState (Text, CalDescStore r) m => ReaderT r m a -> m a
 freeze m = do
     (_, CalDescStore{..}) <- get
-    runReaderT m parsed 
+    runReaderT m parsed
 
 instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
     throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
@@ -204,7 +205,7 @@ getMacrosH :: AppM r Macros
 getMacrosH = freeze $ do
     fconns <- asks formulaConns
     sconns <- asks structureConns
-    return $ Macros $ M.fromList $ 
+    return $ Macros $ M.fromList $
         (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) fconns) ++
         (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns)
 
@@ -245,7 +246,7 @@ type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :
 
 
 launchPSH :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
-launchPSH = runPS 
+launchPSH = runPS
 
 cancelPSH :: Int -> AppM [Rule Text] ()
 cancelPSH = cancelPS
@@ -253,7 +254,7 @@ cancelPSH = cancelPS
 queryPSResultH :: Int -> AppM [Rule Text] [LatexPTDSeq]
 queryPSResultH i = do
     r <- tryDequeue i
-    case r of 
+    case r of
         Nothing -> return []
         Just r -> do
             (_, CalDescStore{..}) <- get
@@ -272,13 +273,13 @@ readerServer :: Config [Rule Text] -> Server API
 readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
-server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH 
+server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH
     :<|> serverPS
 
 myCors :: Middleware
 myCors = cors $ const $ Just customPolicy
     where
-        customPolicy = 
+        customPolicy =
             simpleCorsResourcePolicy { corsRequestHeaders = ["Content-Type", "Cache-Control"] }
 
 
@@ -296,7 +297,7 @@ runCalcIO :: forall r a. FinTypeCalculusDescription r -> CalcMT r IO a -> IO a
 runCalcIO env = \rT -> runReaderT rT env
 
 
--- this hack needs to go at some point??
+-- this hack needs to go at some point?? / rework to be safe...
 mkConfig :: Text -> Text -> IO (Config [Rule Text])
 mkConfig rawCalc rawRules = do
     c <- parseFinTypeCalculusDescription rawCalc
@@ -308,10 +309,6 @@ mkConfig rawCalc rawRules = do
     return Config{..}
 
 
--- test = listFromAPI (Proxy :: Proxy NoTypes) (Proxy :: Proxy NoContent) api
-
-
-
 writeJSCode :: Int -> IO ()
 writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantApi.js"
     where
@@ -319,8 +316,9 @@ writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantAp
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
         -- being added to all the JS functions
         vanillaJSWithNoCache :: [Req NoContent] -> Text
-        vanillaJSWithNoCache xs = vanillaJSWith myOptions $ runIdentity $ mapM (reqHeaders (\xs -> Identity $ (HeaderArg (Arg (PathSegment "Cache-Control") NoContent)):xs)) xs
-        myOptions = defCommonGeneratorOptions{urlPrefix = "http://localhost:" <> show port, moduleName="exports"}
+        vanillaJSWithNoCache xs = vanillaJSWith myOptions $ runIdentity $ mapM
+            (reqHeaders $ Identity . ((HeaderArg $ Arg (PathSegment "Cache-Control") NoContent):)) xs
+        myOptions = defCommonGeneratorOptions{urlPrefix = "http://localhost:" <> show port, Servant.JS.Internal.moduleName="exports"}
 
 
 main :: IO ()

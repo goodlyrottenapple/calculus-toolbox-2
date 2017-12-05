@@ -6,27 +6,27 @@ This is a haddock comment describing your library
 For more information on how to write Haddock comments check the user guide:
 <https://www.haskell.org/haddock/doc/html/index.html>
 -}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE ExplicitForAll        #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ExplicitForAll      #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE StandaloneDeriving      #-}
-{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 module Terms.Parsers where
 
-import Terms
-import Lib.Prelude
-import qualified Prelude as P
+import           Lib.Prelude
+import qualified Prelude            as P
+import           Terms
 -- import Data.Singletons.TH
-import GHC.TypeLits(SomeNat(..))
-import Data.Singletons
+-- import GHC.TypeLits(SomeNat(..))
+import           Data.Singletons
 -- import Text.Parsec (CalculusDescParseError, parse, between, eof, try)
 -- import Text.Parsec.Text (Parser)
 -- import Text.Parsec.Char (oneOf, char, digit, string, letter, satisfy, spaces, endOfLine)
@@ -36,18 +36,18 @@ import Data.Singletons
 
 
 -- import System.Environment
-import Data.Char
-import Text.Earley
-import Text.Earley.Mixfix
-import Data.HashSet(HashSet)
-import qualified Data.HashSet as HS
-import qualified Data.Map as M
-import qualified Data.Text as T
-import Data.Set(Set)
-import qualified Data.Set as S
-import Data.Aeson
+import           Data.Aeson
+import           Data.Char
+import           Data.HashSet       (HashSet)
+import qualified Data.HashSet       as HS
+import qualified Data.Map           as M
+import           Data.Set           (Set)
+import qualified Data.Set           as S
+import qualified Data.Text          as T
+import           Text.Earley
+import           Text.Earley.Mixfix
 
-import Text.Regex (splitRegex, mkRegex)
+import           Text.Regex         (mkRegex, splitRegex)
 -- import Control.Monad.Catch
 
 
@@ -60,17 +60,17 @@ deriving instance ToJSON (Report P.String [P.String])
 reservedCalcFile :: HashSet P.String
 reservedCalcFile = HS.fromList ["(", ")", "{", "}", "|-", "default", "type" ,":", "->"]
 
-data CalcFileParse = CalcTypeP Bool CalcType 
-                   | ConP Level Text [Maybe CalcType] (Maybe CalcType) (Text, Associativity, Int, Text) deriving Show
+data CalcFileParse = CalcTypeP Bool CalcType
+                   | ConP Level Text [Maybe CalcType] (Maybe CalcType) (Text, Text.Earley.Mixfix.Associativity, Int, Text) deriving Show
 
-grammarAssociativity :: Grammar r (Prod r P.String P.String Associativity)
+grammarAssociativity :: Grammar r (Prod r P.String P.String Text.Earley.Mixfix.Associativity)
 grammarAssociativity =
     rule $  (\_ -> LeftAssoc) <$> namedToken "LeftAssoc"
         <|> (\_ -> NonAssoc) <$> namedToken "NonAssoc"
-        <|> (\_ -> RightAssoc) <$> namedToken "RightAssoc" 
+        <|> (\_ -> RightAssoc) <$> namedToken "RightAssoc"
 
 
-grammarConParams :: Grammar r (Prod r P.String P.String (Text, Associativity, Int, Text))
+grammarConParams :: Grammar r (Prod r P.String P.String (Text, Text.Earley.Mixfix.Associativity, Int, Text))
 grammarConParams = mdo
     parserStr <- rule $ toS <$> satisfy (not . (`HS.member` reservedCalcFile))
     assoc <- grammarAssociativity
@@ -86,7 +86,7 @@ grammarFTypes name = mdo
     arr <- rule $ ([],) <$> t
         <|> (\x (xs,ty) -> (x:xs, ty)) <$> t <* namedToken "->" <*> arr
     return arr
-        
+
 
 
 grammarFinTypeCalculusDesc :: Grammar r (Prod r P.String P.String [CalcFileParse])
@@ -97,11 +97,11 @@ grammarFinTypeCalculusDesc = mdo
             <?> "type"
     ftyp <- grammarFTypes "formula"
     styp <- grammarFTypes "structure"
-    conParams <- grammarConParams 
+    conParams <- grammarConParams
     fcon <- rule $ (\n (xs,t) par -> ConP FormulaL n xs t par) <$> (tname <* namedToken ":") <*> ftyp <*> conParams
     scon <- rule $ (\n (xs,t) par -> ConP StructureL n xs t par) <$> (tname <* namedToken ":") <*> styp <*> conParams
     return $ some (typ <|> fcon <|> scon)
-    
+
 
 
 
@@ -114,7 +114,7 @@ tokenize ('"':xs)  = as : tokenize bs
     (as, bs) = brackets xs
     brackets ys = case break (=='"') ys of
         (us,('"':vs)) -> (us,vs)
-        x -> x
+        x             -> x
 tokenize (x:xs)
   | x `HS.member` special = [x] : tokenize xs
   | otherwise             = (x:as) : tokenize bs
@@ -124,8 +124,8 @@ tokenize (x:xs)
 
 
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
-                            | AmbiguousCalcDescParse (Report P.String [P.String]) 
-                            | MultipleDefaultTypes 
+                            | AmbiguousCalcDescParse (Report P.String [P.String])
+                            | MultipleDefaultTypes
                             | SameNameConn Text
                             | SameParserSyntax Text Text
                             | IncorrectNoOfArgs Text Int Int -- the number of holes differs from the number of args expected
@@ -139,7 +139,7 @@ mkFinTypeCalculusDescription ps = do
     let types = S.fromList $ extractTypes ps
         rules = ()
     _ <- checkConns ps
-    (formulaConns , structureConns) <- foldrM 
+    (formulaConns , structureConns) <- foldrM
         (\p (fCs,sCs) -> case p of {
             ConP FormulaL n ts t (ps',a,b,latex) -> do
                 fC <- mkConnDescription defaultType types n ts t ps' a b latex
@@ -154,39 +154,39 @@ mkFinTypeCalculusDescription ps = do
         -- onlyOneDefault :: [CalcFileParse] -> Except CalculusDescParseError CalcType
         onlyOneDefault prs = case filter (\x -> case x of {(CalcTypeP True _) -> True ; _ -> False}) prs of
             [CalcTypeP True t] -> return t
-            _ -> throw MultipleDefaultTypes
+            _                  -> throw MultipleDefaultTypes
 
         extractTypes :: [CalcFileParse] -> [CalcType]
-        extractTypes [] = []
+        extractTypes []                   = []
         extractTypes ((CalcTypeP _ t):xs) = t:extractTypes xs
-        extractTypes (_:xs) = extractTypes xs
+        extractTypes (_:xs)               = extractTypes xs
 
         noOfHoles = T.foldr (\c acc -> if c == '_' then acc+1 else acc) 0
         -- checkConns :: [CalcFileParse] -> Except CalculusDescParseError ()
         checkConns = checkConns' S.empty M.empty
             where
                 checkConns' _    _    [] = return ()
-                checkConns' accN _    ((ConP _ n _ _ _):_)        | n `S.member` accN = 
+                checkConns' accN _    ((ConP _ n _ _ _):_)        | n `S.member` accN =
                     throw $ SameNameConn n
-                checkConns' _    accS ((ConP _ n _ _ (s,_,_,_)):_)  | s `M.member` accS = 
-                    throw $ 
+                checkConns' _    accS ((ConP _ n _ _ (s,_,_,_)):_)  | s `M.member` accS =
+                    throw $
                         SameParserSyntax n (M.findWithDefault "error, this can't happen" s accS)
-                checkConns' accN accS ((ConP _ n ts _ (s,_,_,_)):xs) | length ts /= noOfHoles s = 
+                checkConns' _ _ ((ConP _ n ts _ (s,_,_,_)):_) | length ts /= noOfHoles s =
                     throw $ IncorrectNoOfArgs n (length ts) (noOfHoles s)
-                checkConns' accN accS ((ConP _ n _ _ (s,_,_,_)):xs) | otherwise = 
+                checkConns' accN accS ((ConP _ n _ _ (s,_,_,_)):xs) | otherwise =
                     checkConns' (S.insert n accN) (M.insert s n accS) xs
                 checkConns' accN accS (_:xs) = checkConns' accN accS xs
 
 
-        -- mkConnDescription :: CalcType -> Set CalcType -> 
-        --     Text -> [Maybe CalcType] -> Maybe CalcType -> Text -> Associativity -> Int -> Text -> 
+        -- mkConnDescription :: CalcType -> Set CalcType ->
+        --     Text -> [Maybe CalcType] -> Maybe CalcType -> Text -> Text.Earley.Mixfix.Associativity -> Int -> Text ->
         --     Except CalculusDescParseError (ConnDescription l)
-        mkConnDescription defaultType types n ts t prs a b latex = 
-            if (S.fromList $ outType:inTypes) `S.isSubsetOf` types then 
+        mkConnDescription defaultType types n ts t prs a b latex =
+            if (S.fromList $ outType:inTypes) `S.isSubsetOf` types then
                 return $ ConnDescription{..}
             else throw $ TypesNotDeclared $ types S.\\ (S.fromList $ outType:inTypes)
             where
-                connName = n
+                name = n
                 inTypes = map (fromMaybe defaultType) ts
                 outType = fromMaybe defaultType t
                 assoc = a
@@ -196,7 +196,7 @@ mkFinTypeCalculusDescription ps = do
 
 
 parseFinTypeCalculusDescription :: MonadThrowJSON m => Text -> m (FinTypeCalculusDescription ())
-parseFinTypeCalculusDescription t = 
+parseFinTypeCalculusDescription t =
     case fullParses (parser $ grammarFinTypeCalculusDesc) $ tokenize $ toS t of
         ([p] , _) -> mkFinTypeCalculusDescription p
         ([]  , r) -> throw $ CalcDescParserError r
@@ -218,28 +218,28 @@ holey xs       = Just i : holey rest
 grammarMeta :: SingI l => [Text] -> CalcMT x (Grammar r) (Prod r P.String P.String (Term l 'MetaK Text))
 grammarMeta nPrefixes = mdo
     reserved <- mixfixParts
-    lift $ rule $ (Meta . toS) <$> satisfy (\x -> 
+    lift $ rule $ (Meta . toS) <$> satisfy (\x ->
         not (x `HS.member` reserved) &&
         foldr (\p b -> not (T.isPrefixOf p $ T.toLower $ toS x) && b) True nPrefixes)
 
 
-mkhTable :: [ConnDescription l] -> [[(Holey (Prod r P.String P.String P.String), Associativity)]]
+mkhTable :: [ConnDescription l] -> [[(Holey (Prod r P.String P.String P.String), Text.Earley.Mixfix.Associativity)]]
 mkhTable = (map snd) . sortBy (\(x,_) (y,_) -> compare x y) . M.toList . groupConns
     where
-        groupConns :: [ConnDescription l] -> Map Int [(Holey (Prod r P.String P.String P.String), Associativity)]
+        groupConns :: [ConnDescription l] -> Map Int [(Holey (Prod r P.String P.String P.String), Text.Earley.Mixfix.Associativity)]
         groupConns [] = M.empty
         groupConns (ConnDescription{..}:xs) = M.alter (alterF parserSyntax assoc) binding $ groupConns xs
 
-        alterF :: Text -> Associativity -> Maybe [(Holey (Prod r P.String P.String P.String), Associativity)] -> 
-            Maybe [(Holey (Prod r P.String P.String P.String), Associativity)]
-        alterF s a Nothing = Just $ [(mkHoley s,a)]
+        alterF :: Text -> Text.Earley.Mixfix.Associativity -> Maybe [(Holey (Prod r P.String P.String P.String), Text.Earley.Mixfix.Associativity)] ->
+            Maybe [(Holey (Prod r P.String P.String P.String), Text.Earley.Mixfix.Associativity)]
+        alterF s a Nothing   = Just $ [(mkHoley s,a)]
         alterF s a (Just ls) = Just $ (mkHoley s,a):ls
 
         mkHoley :: Text -> Holey (Prod r P.String P.String P.String)
         mkHoley t = map (map namedToken) (holey $ toS t)
 
 
-hTable :: Monad m => (x -> [ConnDescription l]) -> ReaderT x m [[(Holey (Prod r P.String P.String P.String), Associativity)]]
+hTable :: Monad m => (x -> [ConnDescription l]) -> ReaderT x m [[(Holey (Prod r P.String P.String P.String), Text.Earley.Mixfix.Associativity)]]
 hTable f = do
     d <- ask
     return $ mkhTable (f d)
@@ -248,14 +248,14 @@ hTable f = do
 lookupH :: Monad m => (x -> [ConnDescription l]) -> ReaderT x m (Map (Holey P.String) Text)
 lookupH f = do
     d <- ask
-    return $ M.fromList $ map (\ConnDescription{..} -> (holey $ toS parserSyntax, connName)) (f d)
+    return $ M.fromList $ map (\ConnDescription{..} -> (holey $ toS parserSyntax, name)) (f d)
 
 
 mixfixParts :: Monad m => CalcMT x m (HashSet P.String)
 mixfixParts = do
     Description{..} <- ask
-    return $ HS.fromList $ 
-        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) formulaConns   , Just s <- ys] ++ 
+    return $ HS.fromList $
+        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) formulaConns   , Just s <- ys] ++
         [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) structureConns , Just s <- ys] ++ ["(", ")", "|-"]
 
 
@@ -316,29 +316,20 @@ instance TermGrammar 'StructureL 'ConcreteK where
 
 
 data TermParseError = TermParserError (Report P.String [P.String])
-                    | AmbiguousTermParse (Report P.String [P.String]) 
+                    | AmbiguousTermParse (Report P.String [P.String])
                     | AmbiguousRuleParse [Rule Text]
                     | TermUntypeable (TypeableError Text)
                     | RuleUntypeable Text deriving (Show, Generic, ToJSON)
 
 instance Exception TermParseError
 
--- parseTerm :: forall l k x. (TermGrammar l k) => Text -> 
---     CalcMErr x TermParseError (Term l k Text)
--- parseTerm inStr = do
---     e <- ask
---     case fullParses (parser $ runReaderT grammarTerm e) $ tokenize $ toS inStr of
---         ([p] , _) -> return p
---         ([] , r) -> throwError $ TermParserError r
---         (_ , r) -> throwError $ AmbiguousTermParse r
 
 
-
-grammarDSeq :: TermGrammar 'StructureL k => 
+grammarDSeq :: TermGrammar 'StructureL k =>
     CalcMT x (Grammar r) (Prod r P.String P.String (DSequent k Text))
 grammarDSeq = mdo
     Description{..} <- ask
-    typ     <- lift $ rule $ (Type . toS) <$> satisfy 
+    typ     <- lift $ rule $ (Type . toS) <$> satisfy
                 (\x -> (Type $ toS x) `S.member` types)
                 <?> "type of sequent"
     exprS   <- grammarTerm
@@ -346,23 +337,7 @@ grammarDSeq = mdo
                     <|> (\x y -> DSeq x defaultType y) <$> exprS <* namedToken "|-" <*> exprS
 
 
-
--- liftExcept :: CalcMErr x e a -> (e -> e') -> CalcMErr x e' a
--- liftExcept m f = do
---     env <- ask
---     case runCalcErr env m of 
---         Left err -> throwError $ f err
---         Right x -> return x
-
-
--- liftExcept :: (MonadError e m , MonadError e' m) => m a -> (e -> e') -> m a
--- liftExcept m f = do
---     env <- ask
---     case runCalcErr env m of 
---         Left err -> throwError $ f err
---         Right x -> return x
-
-parseCDSeq :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+parseCDSeq :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
     Text -> m (DSequent 'ConcreteK Text)
 parseCDSeq inStr = do
     e <- ask
@@ -390,38 +365,18 @@ grammarRule = mdo
 
 splitRules :: P.String -> [P.String]
 splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
-    where 
+    where
         emptyString :: P.String -> Bool
         emptyString = (\x -> x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n"))
 
 
--- parseRulesStrict :: Text -> CalcMErr x TermParseError [Rule Text]
--- parseRulesStrict inStr = do undefined
-    -- e <- ask
-    -- parse e $ (splitRules . toS) inStr
-    -- where
-    --     parse :: FinTypeCalculusDescription x -> [P.String] -> CalcMErr x TermParseError [Rule Text]
-    --     parse _ [] = return []
-    --     parse e (r:rs) = do
-    --         r' <- case fullParses (parser $ runReaderT grammarRule e) $ tokenize $ r of
-    --             ([] , rep) -> throwError $ TermParserError rep
-    --             (ps@(Rule{..}:_) , _)   -> do
-    --                 ps' <-  filterTypeable typeableRule ps
-    --                 case ps' of
-    --                     []  -> throwError $ RuleUntypeable name
-    --                     [p] -> return p
-    --                     _   -> throwError $ AmbiguousRuleParse ps'
-    --         rs' <- parse e rs
-    --         return $ r':rs'
-
-
--- this version does not throw an error on ambiguous parse, 
+-- this version does not throw an error on ambiguous parse,
 -- but choses the most general version of the rule
-parseRules :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+parseRules :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
     Text -> m [Rule Text]
 parseRules str = parse $ (splitRules . toS) str
     where
-        parse :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+        parse :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
             [P.String] -> m [Rule Text]
         parse [] = return []
         parse (r:rs) = do
@@ -430,21 +385,10 @@ parseRules str = parse $ (splitRules . toS) str
                 ([] , rep) -> throw $ TermParserError rep
                 (prules@(Rule{..}:_) , _) -> do
                     prulesMetaMap <- (mapM typeableRule prules)
-                    fixed <- (mapM (\(m,r) -> fixRule m r) $ zip prulesMetaMap prules)
+                    fixed <- zipWithM (\m r'' -> fixRule m r'') prulesMetaMap prules
                     case fixed of
                         []  -> throw $ RuleUntypeable name
-                        [p] -> return p 
+                        [p] -> return p
                         ps' -> throw $ AmbiguousRuleParse ps'
             rs' <- parse rs
             return $ r':rs'
-
-
-
-
--- testP :: IO (Either TermParseError [Rule Text])
--- testP = do
---     cd <- readFile "DEAK.calc"
---     let (Right calcDesc) = runExcept $ parseFinTypeCalculusDescription cd
---     r <- readFile "DEAK.rules"
---     return $ runCalcErr calcDesc $ parseRules r
-

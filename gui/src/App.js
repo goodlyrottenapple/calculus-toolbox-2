@@ -5,7 +5,7 @@ import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
 import { getMacros } from './ServantApi.js'
 
-import { Button, Dropdown, Tab, Menu } from 'semantic-ui-react'
+import { Dropdown } from 'semantic-ui-react'
 
 class App extends Component {
   constructor() {

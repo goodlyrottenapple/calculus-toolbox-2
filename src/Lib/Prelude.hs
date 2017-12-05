@@ -4,21 +4,21 @@ Export here everything that should always be in your library scope
 For more info on what is exported by Protolude check:
 https://github.com/sdiehl/protolude/blob/master/Symbols.md
 -}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE UndecidableInstances    #-}
-{-# LANGUAGE PolyKinds    #-}
-{-# LANGUAGE TypeFamilies    #-}
-{-# LANGUAGE MultiParamTypeClasses    #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveFoldable        #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveTraversable     #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 
 module Lib.Prelude
@@ -28,11 +28,11 @@ module Lib.Prelude
       -- ,(!), Vec(..), toVec
     ) where
 
-import Protolude as Exports
-import GHC.TypeLits
-import Unsafe.Coerce(unsafeCoerce)
+import           GHC.TypeLits
+import           Protolude     as Exports
+import           Unsafe.Coerce (unsafeCoerce)
 
-import Data.Aeson
+import           Data.Aeson
 
 type family Length (l :: [k]) where
     Length '[] = 0
@@ -74,7 +74,6 @@ nil = Vec (0, [])
 
 unconsV :: (NotZ n ~ 'True) => Vec n a -> (a , Vec (n-1) a)
 unconsV (Vec (n, x:xs)) = (x, Vec (n-1, xs))
-unconsV _ = error "should not be reachable"
 
 consV :: a -> Vec n a -> Vec (n+1) a
 consV x (Vec (n, xs)) = Vec (n+1, x:xs)
@@ -96,5 +95,8 @@ zipV (Vec (n, as)) (Vec (_, bs)) = Vec $ (n , zip as bs)
 eqLen :: Vec n a -> Vec m b -> Maybe (n :~: m)
 eqLen (Vec (n, _)) (Vec (m, _)) | n == m = Just (unsafeCoerce Refl)
                      | otherwise = Nothing
+
+instance ToJSON a => ToJSON (Vec n a) where
+    toJSON = toJSON . toList
 
 

@@ -1,66 +1,60 @@
 {-|
-Module      : Lib
-Description : Lib's main module
+Module      : Terms.JSON
+Description : JSON instances for the GUI
 
 This is a haddock comment describing your library
 For more information on how to write Haddock comments check the user guide:
 <https://www.haskell.org/haddock/doc/html/index.html>
 -}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE ExplicitForAll      #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE DeriveAnyClass         #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE DeriveFoldable         #-}
+{-# LANGUAGE DeriveFunctor          #-}
+{-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE DeriveTraversable      #-}
+{-# LANGUAGE ExplicitForAll         #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE RecordWildCards        #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveTraversable    #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE DeriveGeneric    #-}
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
-{-# LANGUAGE PolyKinds    #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeOperators          #-}
 
 module Terms.JSON where
 
-import Terms
-import Lib.Prelude
-import Data.Aeson
-import Data.Singletons
+import           Data.Aeson
+import           Data.Singletons
+import           Lib.Prelude
+import           Terms
 -- import qualified Prelude as P
 -- import Data.Singletons.TH
 -- import GHC.TypeLits
-import qualified Data.Text as T
-import qualified Data.Map as M
+import qualified Data.Map           as M
+import qualified Data.Text          as T
 
-import Text.Earley.Mixfix(Associativity(..))
+import           Text.Earley.Mixfix (Associativity (..))
 
 newtype LatexDSeq r k = LatexDSeq { unMk :: (FinTypeCalculusDescription r, DSequent k Text) }
 
 instance ToJSON (LatexDSeq r 'ConcreteK) where
-    toJSON (LatexDSeq (d, s@(DSeq l _ r))) = object [
+    toJSON (LatexDSeq (d, s)) = object [
             "latex" .= (toJSON $ runReader (pprint s) d) -- <> " \\vdash " <> pprint r) ,
           , "term" .= toJSON s
         ]
-        -- where
-        --     pprint :: Term k 'ConcreteK Text -> Text
-        --     pprint (Base c) = c
-        --     pprint (Lift x) = pprint x
-        --     pprint (Con (C c) xs) = "\\seq" <> c <> (T.intercalate "" $ map (\x -> "{" <> pprint x <> "}") $ toList xs)
-
 
 
 getLevelT :: forall l k a. SingI l => Term l k a -> Level
-getLevelT _ = fromSing (sing :: Sing l) 
+getLevelT _ = fromSing (sing :: Sing l)
 
 
 
@@ -74,10 +68,10 @@ getBinding (Con (C c) _) = do
     return binding
 
 
-getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Associativity
+getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Text.Earley.Mixfix.Associativity
 getAssoc (Base _) = return NonAssoc
 getAssoc (Meta _) = return NonAssoc
-getAssoc (Lift x) = return NonAssoc
+getAssoc (Lift _) = return NonAssoc
 getAssoc (Con (C c) _) = do
     conns <- connMap' @l
     let ConnDescription{..} = conns M.! c
@@ -89,8 +83,8 @@ class PPrint a where
 
 
 instance PPrint Level where
-    pprint AtomL = return "A"
-    pprint FormulaL = return "F"
+    pprint AtomL      = return "A"
+    pprint FormulaL   = return "F"
     pprint StructureL = return "S"
 
 
@@ -109,18 +103,18 @@ instance PPrint a => PPrint (Term l k a) where
         return $ "?_{" <> l <> "} " <> pa
     pprint (Base a) = pprint a
     pprint (Lift a) = pprint a
-    pprint x@(Con (C c) vs) = do
-        bnd <- getBinding x
-        ass <- getAssoc x
-        pprint' c bnd ass $ toList vs
+    pprint trm@(Con (C con) vs) = do
+        bnd <- getBinding trm
+        ass <- getAssoc trm
+        pprint' con bnd ass $ toList vs
         where
-            pprint' :: Monad m => Text -> Int -> Associativity -> [Term l k a] -> CalcMT r m Text
+            pprint' :: Monad m => Text -> Int -> Text.Earley.Mixfix.Associativity -> [Term l k a] -> CalcMT r m Text
             pprint' c _ _ [] =  return $ "\\seq" <> c
             pprint' c bind _ [x] = do
                 px <- pprint x
                 bind' <- getBinding x
-                return $ 
-                    if bind > bind' then "\\seq" <> c <> "{(" <> px <> ")}" 
+                return $
+                    if bind > bind' then "\\seq" <> c <> "{(" <> px <> ")}"
                     else "\\seq" <> c <> "{" <> px <> "}"
             pprint' c bind assoc [x,y] = do
                 px <- pprint x
@@ -130,20 +124,20 @@ instance PPrint a => PPrint (Term l k a) where
                 assocx <- getAssoc x
                 assocy <- getAssoc y
                 let left = case (compare bind bindx, assoc, assocx) of
-                        (GT,_,_) -> "{(" <> px <> ")}"
-                        (LT,_,_) -> "{" <> px <> "}"
-                        (EQ,LeftAssoc,RightAssoc) -> "{(" <> px <> ")}"
+                        (GT,_,_)                   -> "{(" <> px <> ")}"
+                        (LT,_,_)                   -> "{" <> px <> "}"
+                        (EQ,LeftAssoc,RightAssoc)  -> "{(" <> px <> ")}"
                         (EQ,RightAssoc,RightAssoc) -> "{(" <> px <> ")}"
-                        (EQ,_,_) -> "{" <> px <> "}"
+                        (EQ,_,_)                   -> "{" <> px <> "}"
                     right = case (compare bind bindy, assoc, assocy) of
-                        (GT,_,_) -> "{(" <> py <> ")}"
-                        (LT,_,_) -> "{" <> py <> "}"
-                        (EQ,LeftAssoc,LeftAssoc) -> "{(" <> py <> ")}"
-                        (EQ,RightAssoc,LeftAssoc) -> "{(" <> py <> ")}"
-                        (EQ,_,_) -> "{" <> py <> "}"
+                        (GT,_,_)                   -> "{(" <> py <> ")}"
+                        (LT,_,_)                   -> "{" <> py <> "}"
+                        (EQ,LeftAssoc,LeftAssoc)   -> "{(" <> py <> ")}"
+                        (EQ,RightAssoc,LeftAssoc)  -> "{(" <> py <> ")}"
+                        (EQ,_,_)                   -> "{" <> py <> "}"
                 return $ "\\seq" <> c <> left <> right
 
-            pprint' c bind _ xs = do
+            pprint' c _ _ xs = do
                 pxs <- mapM pprint xs
                 return $ "\\seq" <> c <> (T.intercalate "" $ map (\x -> "{" <> x <> "}") pxs)
 
@@ -153,7 +147,7 @@ newtype Macros = Macros (Map Text Text) deriving (Generic, ToJSON)
 
 
 data CalcDesc = CalcDesc {
-    name :: Text
-  , rawCalc :: Text 
-  , rawRules :: Text 
+    name     :: Text
+  , rawCalc  :: Text
+  , rawRules :: Text
 } deriving (Generic, ToJSON, FromJSON)
