@@ -23,12 +23,13 @@ import           Terms
 import           Data.Aeson
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map            as M
+import qualified Data.Set            as S
 import qualified Prelude             as P
 
 
 data PT a = PT {
     premises   :: [PT a]
-  , ruleName   :: Text
+  , name       :: Text
   , conclusion :: a
 } deriving (Show, Functor)
 
@@ -108,53 +109,61 @@ subSeq m (DSeq l n r) = do
 type RuleName = Text
 
 
-isApplicable :: (Ord a, Ord b) => Rule a -> DSequent 'ConcreteK b -> Maybe [DSequent 'ConcreteK b]
-isApplicable Rule{..} dseq = do
+isApplicable :: (Ord a, Ord b) => Rule a -> DSequent 'ConcreteK b -> Maybe (Either [DSequent 'ConcreteK b] [DSequent 'ConcreteK b])
+isApplicable (Rule _ premises conclusion) dseq = do
     udict <- unifySeq conclusion dseq
-    mapM (subSeq udict) premises
-
+    liftM Left $ mapM (subSeq udict) premises
+isApplicable (RevRule _ premise conclusion) dseq = r1 <|> r2 -- we assume that a reversible rule should not be applicable in both direcions!!
+    where
+        r1 = do
+            udict <- unifySeq conclusion dseq
+            liftM (Left . (:[])) $ subSeq udict premise
+        r2 = do
+            udict <- unifySeq premise dseq
+            liftM (Left . (:[])) $ subSeq udict conclusion
 
 getApplicableRules :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) => DSequent 'ConcreteK b ->
     m (Map RuleName [DSequent 'ConcreteK b])
 getApplicableRules dseq = do
     rs <- asks rules
-    return $ foldr (\r@Rule{..} m -> case isApplicable r dseq of {
-        Just ps -> M.insert name ps m;
-        Nothing -> m}) M.empty rs
+    return $ foldr (\r m -> case isApplicable r dseq of {
+        (Just (Left ps))  -> M.insert (ruleName r) ps m;
+        (Just (Right ps)) -> M.insert (ruleName r <> "Rev") ps m;
+        Nothing   -> m}) M.empty rs
 
 
 findProof' :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
-    Int -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
-findProof' 0 _ = return []
-findProof' n s = do
+    Int -> Set (DSequent 'ConcreteK b) -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
+findProof' 0 _ _ = return []
+findProof' n prems s = if s `S.member` prems then return [PT [] "Prem" s] else do
     appM <- getApplicableRules s
     aux1 s $ M.toList appM
 
     where
-        aux1 :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
-            DSequent 'ConcreteK b -> [(RuleName, [DSequent 'ConcreteK b])] -> m [PT (DSequent 'ConcreteK b)]
+        -- aux1 :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
+        --     DSequent 'ConcreteK b -> [(RuleName, [DSequent 'ConcreteK b])] -> m [PT (DSequent 'ConcreteK b)]
         aux1 _ [] = return []
         aux1 c ((nm,ps):xs) = do
             x <- aux c nm ps
             xs' <- aux1 c xs
             return $ x ++ xs'
 
-        aux :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
-            DSequent 'ConcreteK b -> RuleName -> [DSequent 'ConcreteK b] -> m [PT (DSequent 'ConcreteK b)]
+        -- aux :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
+        --     DSequent 'ConcreteK b -> RuleName -> [DSequent 'ConcreteK b] -> m [PT (DSequent 'ConcreteK b)]
         aux c nm [] = return $ [PT [] nm c]
         aux c nm (p:ps) = do
-            pPts <- findProof' (n-1) p
+            pPts <- findProof' (n-1) prems p
             psPts <- aux c nm ps
             return $ concat $ map (\p' -> map (\(PT ps' nm' c') -> PT (p':ps') nm' c') psPts) pPts
 
 
 findProof :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
-    Int -> Int -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
-findProof n maxIters s | n == maxIters = findProof' n s
+    Int -> Int -> Set (DSequent 'ConcreteK b) -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
+findProof n maxIters prems s | n == maxIters = findProof' n prems s
                   | otherwise = do
-                    r <- findProof' n s
+                    r <- findProof' n prems s
                     case r of
-                        [] -> findProof (n+1) maxIters s
+                        [] -> findProof (n+1) maxIters prems s
                         _  -> return r
 
 

@@ -1,26 +1,36 @@
+
 import React, { Component } from 'react';
 import './App.css';
 import CalcDescription from './CalcDescription.js'
 import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
+import DocName from './DocName.js'
+
 import { getMacros } from './ServantApi.js'
 
-import { Dropdown } from 'semantic-ui-react'
+import { Dropdown, Segment, Header, Image, Menu, Icon, Sidebar, Button } from 'semantic-ui-react'
+import { Route, Switch } from 'react-router-dom'
 
 class App extends Component {
+
+
   constructor() {
     super()
     this.state = {
-      addingCalcDesc: false,
       macros: {},
+      name: '',
       ptSequent: {
         latex : '',
         term: {}
-      }
+      },
+      sidebarVisible: false
     }
-    this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
+    // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
     this.mkPT = this.mkPT.bind(this)
+    this.updateName = this.updateName.bind(this)
+    this.openEdit = this.openEdit.bind(this)
+
   }
 
   componentDidMount() {
@@ -42,8 +52,8 @@ class App extends Component {
     throw error;
   }
 
-  toggleCalcDesc() {
-    this.setState({addingCalcDesc: !this.state.addingCalcDesc })
+  toggle(x) {
+    this.setState({[x] : !this.state[x]})
   }
 
   mkPT(s) {
@@ -51,48 +61,93 @@ class App extends Component {
     console.log(s)
   }
 
+  updateName(n) {
+    this.setState({name:n})
+  }
+
+  openEdit() {
+    const electron = window.require('electron');
+    //   // const fs = electron.remote.require('fs');
+    const ipcRenderer = electron.ipcRenderer;
+    //   const {dialog} = window.require('electron').remote
+    //   console.log(dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
+
+      // console.log(electron.dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
+
+      const remote = electron.remote;
+      const BrowserWindow = remote.BrowserWindow;
+      var win = new BrowserWindow({ width: 800, height: 600 });
+      win.loadURL('http://localhost:3000/edit');
+
+
+      ipcRenderer.on('calcUpdate', m => {
+          console.log(m); // logs out "Hello second window!"
+      })
+  }
 
   render() {
-    // const html = Katex.renderToString(this.state.sequent, {macros:this.state.kmacros});
-    // let calcDescription;
-    // if(this.state.addingCalcDesc) calcDescription =
-
-    // const mItem = <Menu.Item>a |- a /\ b<span style={{'padding-left':'50px'}}/>
-    //   <Button basic icon="close" style={{'box-shadow':'none', 'font-size': '0.8em' }}/></Menu.Item>
-    // const panes = [
-    //   { menuItem: mItem, render: () => <Tab.Pane>Tab 1 Content</Tab.Pane> },
-    //   { menuItem: mItem, render: () => <Tab.Pane>Tab 2 Content</Tab.Pane> },
-    //   { menuItem: mItem, render: () => <Tab.Pane>Tab 3 Content</Tab.Pane> },
-    // ]
-
-    // const TabExampleBasic = () => (
-    //   <Tab panes={panes} />
-    // )
-
     const MainMenu = (
       <Dropdown id="mainMenu" text='Menu' floating>
         <Dropdown.Menu>
-          <Dropdown.Item>Load Calculus</Dropdown.Item>
-          <Dropdown.Item onClick={this.toggleCalcDesc}>Modify Calculus</Dropdown.Item>
+          <Dropdown.Item onClick={() => this.newWindow()}>Load Calculus</Dropdown.Item>
+          <Dropdown.Item onClick={this.openEdit}>Modify Calculus</Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
     )
 
-    return (
-      <div className="App">
-        <div>
-        {MainMenu}
-        </div>
-        <CalcDescription 
-          open={this.state.addingCalcDesc} 
-          onClose={this.toggleCalcDesc}
-          onSave={this.reloadMacros} />
+    const sidebarArea = (<Sidebar.Pushable as={Segment} style={{marginBottom: '0px', border:'0px'}}>
+          <Sidebar
+            as={Menu}
+            style={{borderTopWidth: '0px', borderBottomWidth: '0px'}}
+            animation='overlay'
+            width='wide'
+            direction='right'
+            visible={this.state.sidebarVisible}
+            icon='labeled'
+            vertical
+          >
+            <Button style={{float:'right', margin:'10px'}} basic circular icon='close' onClick={() => this.toggle('sidebarVisible')} />
+            <div style={{margin:'10px'}}>
+              <Header style={{marginTop:'56px'}} textAlign='left' size='tiny'>Assumptions</Header>
 
-        <div id="ProofTree">
-          <ProofTree macros={this.state.macros} sequent={this.state.ptSequent} rule=""/>
-        </div>
+              <Segment.Group >
+                <Segment>Nested Top</Segment>
+                <Segment>Nested Middle</Segment>
+                <Segment>Nested Bottom</Segment>
+              </Segment.Group>
+            </div>
+          </Sidebar>
+          <Sidebar.Pusher style={{minHeight: '100vh'}}>
+            <div style={{paddingBottom: '30px'}}>
+              {MainMenu}
+              <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
+              <DocName style={{float:'right', margin:'18px'}} onEdit={this.updateName}/>
+            </div>
+            <div id="ProofTree">
+              <ProofTree macros={this.state.macros} 
+                         sequent={this.state.ptSequent} 
+                         saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
+                         rule=""/>
+            </div>
+          </Sidebar.Pusher>
+        </Sidebar.Pushable>)
+
+    const main = () => (
+      <div className="App">
+        {sidebarArea}
         <ParserBar macros={this.state.macros} callback={this.mkPT}/>
-      </div>
+      </div>)
+
+    const edit = () => <CalcDescription 
+      open={true} 
+      onClose={() => this.toggle('addingCalcDesc')}
+      onSave={this.reloadMacros} />
+
+    return (
+      <Switch>
+        <Route path="/edit" component={edit}/>
+        <Route path="/" component={main}/>
+      </Switch>
     );
   }
 }

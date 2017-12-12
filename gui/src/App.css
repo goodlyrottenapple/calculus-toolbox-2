@@ -27,7 +27,17 @@
   to { transform: rotate(360deg); }
 }
 
+input {
+  -webkit-app-region: no-drag;
+}
 
+div.CodeMirror-vscrollbar{
+  -webkit-app-region: no-drag;
+}
+
+div.CodeMirror-code{
+  -webkit-app-region: no-drag;
+}
 
 #BottomBar div {
   display: inline-block;
@@ -38,8 +48,8 @@
 }
 
 #mainMenu {
-  margin-top: 15px;
-  margin-left: 15px;
+  margin-top: 10px;
+  margin-left: 95px;
 }
 
 @font-face {

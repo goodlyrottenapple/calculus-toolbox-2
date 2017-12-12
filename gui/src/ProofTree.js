@@ -34,28 +34,25 @@ export default class ProofTree extends Component {
     this.runPS = this.runPS.bind(this)  
     this.cancelPS = this.cancelPS.bind(this)  
     this.pollPS = this.pollPS.bind(this)  
-    this.toggleAddingRules = this.toggleAddingRules.bind(this)  
-    this.toggleDoingPS = this.toggleDoingPS.bind(this)  
+
+    this.toggle = this.toggle.bind(this)
     this.toJSON = this.toJSON.bind(this)  
   }
 
 
   componentWillReceiveProps(nextProps) {
-    this.setState({
-      sequent: nextProps.sequent, 
-      rule: nextProps.rule,
-      possibleRules: [],
-      children: nextProps.children
-    })
+    if (nextProps.sequent !== this.props.sequent)
+      this.setState({
+        sequent: nextProps.sequent, 
+        rule: nextProps.rule,
+        possibleRules: [],
+        children: nextProps.children
+      })
   }
 
 
-  toggleAddingRules() {
-    this.setState({addingRules: !this.state.addingRules })
-  }
-
-  toggleDoingPS() {
-    this.setState({doingPS: !this.state.doingPS })
+  toggle(x) {
+    this.setState({[x] : !this.state[x]})
   }
 
   addAbove(r) {
@@ -64,7 +61,7 @@ export default class ProofTree extends Component {
       <ProofTree macros={this.props.macros} sequent={r} rule=""/>
     )
     this.setState({rule:r.rule, children:cs})
-    this.toggleAddingRules()
+    this.toggle('addingRules')
   }
 
   deleteAbove() {
@@ -74,21 +71,22 @@ export default class ProofTree extends Component {
   getPossibleRules() {
     const success = (data) => {
       this.setState({possibleRules: data })
-      this.toggleAddingRules()
+      this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
     postApplicableRules(this.props.sequent.term, 'private', success, error)
   }
 
   runPS() {
-    this.toggleDoingPS()
+    this.toggle('doingPS')
     const success = (data) => {
       console.log(data)
       this.setState({psId: data})
       this.pollPS()
     }
     const error = (data) => console.log(data)
-    postLaunchPS(this.props.sequent.term, 'private', success, error)
+    // 15 is the proof depth parameter
+    postLaunchPS([15,[],this.props.sequent.term], 'private', success, error)
   }
 
   pollPS() {
@@ -99,7 +97,7 @@ export default class ProofTree extends Component {
       }
       else if(data.length === 1){
         // console.log(data);
-        this.toggleDoingPS();
+        this.toggle('doingPS');
         this.deleteAbove();
         this.appendPT(data[0]);
       } else {
@@ -124,22 +122,13 @@ export default class ProofTree extends Component {
   }
 
   cancelPS() {
-    this.toggleDoingPS()
+    this.toggle('doingPS');
     const success = (data) => {
       console.log(data)
     }
     const error = (data) => console.log(data)
     postCancelPS(this.state.psId, 'private', success, error)
   }
-
-  // toJSONaux(node) {
-  //   const r = node.props.rule
-  //   const concl = node.props.sequent
-  //   console.log(node.props.children)
-  //   const cs = node.props.children.map((c) => this.toJSONaux(c))
-  //   return { [r] : { conclusion: concl, premises: cs} }
-  // }
-
 
   toJSON() {
     const r = this.state.rule
@@ -230,7 +219,7 @@ export default class ProofTree extends Component {
           </Modal.Description>
         </Modal.Content>
         <Modal.Actions>
-          <Button negative onClick={this.toggleAddingRules}>Cancel</Button>
+          <Button negative onClick={() => this.toggle('addingRules')}>Cancel</Button>
         </Modal.Actions>
       </Modal>
     )

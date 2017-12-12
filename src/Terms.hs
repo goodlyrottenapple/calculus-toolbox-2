@@ -37,33 +37,14 @@ module Terms where
 
 import qualified Data.Text          as T
 import           Lib.Prelude
-
 import           Data.Map           (Map)
 import qualified Data.Map           as M
-
-
 import           Data.Set           (Set)
--- import qualified Data.Set as S
-
-
--- import TH
--- import GHC.TypeLits
 import           Data.Singletons.TH
 import           Unsafe.Coerce      (unsafeCoerce)
--- import Data.Tree
--- import Data.Tree.Pretty
 import           Data.Aeson
-
--- import Data.Data
-
 import           Text.Earley.Mixfix (Associativity)
--- import Control.Monad.Catch
-
-
--- import Data.Vector(Vector)
--- import qualified Data.Vector as V
-
--- import qualified Text.Parsec.Expr as E
+import           GHC.TypeLits
 
 
 $(singletons [d| data Level = AtomL | FormulaL | StructureL deriving (Show, Generic, ToJSON, FromJSON) |])
@@ -109,6 +90,7 @@ instance Eq a => Eq (Term l k a) where
 
 instance Ord a => Ord (Term 'AtomL 'MetaK a) where
     compare (Meta a) (Meta b) = compare a b
+    compare _ _ = undefined
 
 instance Ord a => Ord (Term 'FormulaL 'MetaK a) where
     compare (Meta a) (Meta b)     = compare a b
@@ -136,6 +118,7 @@ instance Ord a => Ord (Term 'StructureL 'MetaK a) where
 
 instance Ord a => Ord (Term 'AtomL 'ConcreteK a) where
     compare (Base a) (Base b) = compare a b
+    compare _ _ = undefined
 
 
 instance Ord a => Ord (Term 'FormulaL 'ConcreteK a) where
@@ -203,14 +186,14 @@ instance ToJSON a => ToJSON (Term l k a) where
 
 mkCon :: (IsAtom l ~ 'False, SingI l, StringConv s Text, Ord t, IsString s) =>
     Map t s -> t -> [Term l k a] -> Term l k a
-mkCon d h xs = case tlength xs of
-    (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C $ toS $ M.findWithDefault "???" h d) vs
+mkCon d h xs = case vec xs of
+    (SomeVec vs) -> Con (C $ toS $ M.findWithDefault "???" h d) vs
 
 
 unsafeMkCon :: (IsAtom l ~ 'False, SingI l) =>
     Text -> [Term l k a] -> Term l k a
-unsafeMkCon c xs = case tlength xs of
-    (Just (SomeNat p)) -> let (Just vs) = vec p xs in Con (C c) vs
+unsafeMkCon c xs = case vec xs of
+    (SomeVec vs) -> Con (C c) vs
 
 
 
@@ -288,22 +271,16 @@ instance FromJSON a => FromJSON (DSequent 'ConcreteK a) where
 -- data Sequent k a = Seq [Term 'FormulaL k a] [Term 'FormulaL k a]
 
 
-data Rule a = Rule {
-    name       :: Text
-  , premises   :: [DSequent 'MetaK a]
-  , conclusion :: DSequent 'MetaK a
-} deriving (Show, Eq, Ord, Generic, ToJSON)
+data Rule a = Rule Text [DSequent 'MetaK a] (DSequent 'MetaK a)
+            | RevRule Text (DSequent 'MetaK a) (DSequent 'MetaK a)
+              deriving (Show, Eq, Ord, Generic, ToJSON)
 
+
+ruleName :: Rule a -> Text
+ruleName (Rule n _ _) = n
+ruleName (RevRule n _ _) = n
 
 type CalcMT r m = ReaderT (FinTypeCalculusDescription r) m
--- type CalcMErr r e = CalcMT r (Except e)
--- type CalcM r = CalcMT r Identity
-
-
-
--- runCalcState :: Monad m => FinTypeCalculusDescription r -> s -> CalcMT r (StateT s m) a -> m a
--- runCalcState env s ma = liftM fst $ runStateT (runReaderT ma env) s
-
 
 
 data TypeableError a = TypeMismatch a CalcType CalcType
@@ -505,24 +482,20 @@ fixMDSeq acc (DSeq l t r) = do
 
 
 typeableRule :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => Rule Text -> m (Map Text (Level, CalcType))
-typeableRule Rule{..} = do
+typeableRule (Rule _ premises conclusion) = do
     conclAcc <- typeableMDSeq' M.empty conclusion
     foldrM (\dseq acc -> typeableMDSeq' acc dseq) conclAcc premises
+typeableRule (RevRule _ premise conclusion) = do
+    conclAcc <- typeableMDSeq' M.empty conclusion
+    typeableMDSeq' conclAcc premise
 
 
 fixRule :: (MonadThrowJSON m) => Map Text (Level, t) -> Rule Text -> m (Rule Text)
-fixRule acc Rule{..} = do
+fixRule acc (Rule name premises conclusion) = do
     concl' <- fixMDSeq acc conclusion
     prems' <- mapM (fixMDSeq acc) premises
     return $ Rule name prems' concl'
-
-
--- filterTypeable :: (Monad m) =>
---     (t -> CalcMErr r e res) -> [t] -> CalcMT r m [t]
--- filterTypeable _ [] = return []
--- filterTypeable mf (r:rs) = do
---     rs' <- filterTypeable mf rs
---     env <- ask
---     case runCalcErr env $ mf r of
---         Left _ -> return rs'
---         Right _ -> return $ r:rs'
+fixRule acc (RevRule name premise conclusion) = do
+    concl' <- fixMDSeq acc conclusion
+    prem' <- fixMDSeq acc premise
+    return $ RevRule name prem' concl'

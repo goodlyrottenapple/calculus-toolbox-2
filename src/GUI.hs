@@ -12,6 +12,7 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module GUI where
 
@@ -38,8 +39,8 @@ import qualified Data.IntMap.Strict          as IntMap
 import qualified Data.Map                    as M
 
 -- import qualified Data.Text as T
--- import Control.Monad.Except
--- import Control.Monad.Reader
+import Control.Monad.Except
+import Control.Monad.Reader
 -- import Text.Earley
 
 
@@ -77,6 +78,7 @@ data Config r = Config {
     currentCalcDec :: IORef (Text, CalDescStore (FinTypeCalculusDescription r))
   , psQueue        :: IORef (IntMap (Either ThreadId (Maybe PTDSeq)))
   , psQueueCounter :: IORef Int
+  , calcFolder :: [Char]
 }
 
 
@@ -108,19 +110,23 @@ cancelPS i = AppM $ \Config{..} -> do
       Just (Left tid) -> (IntMap.delete i m, Just tid)
       _               -> (m , Nothing)
     case v of
-        Just tid -> killThread tid
+        Just tid -> do
+            killThread tid
+            print ("search terminated" :: Text)
+            q <- readIORef psQueue
+            print q
         -- Nothing -> ?? This has been canceled already... or the thread hadnt been added to the IntMap yet??
         Nothing  -> return () -- thread has finished and stored the result in the map
     -- print $ ("cancelled ps for: " <> show i :: Text)
 
-runPS :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
-runPS dseq = do
+runPS :: Int -> Set (DSequent 'ConcreteK Text) -> DSequent 'ConcreteK Text -> AppM [Rule Text] Int
+runPS maxDepth prems dseq = do
     (_, CalDescStore{..}) <- get
     q <- getQueue
     qi <- getIntoQueue
     _ <- liftIO $ forkFinally (do
         enqueuePS qi q
-        r <- liftM (head . take 1) $ runReaderT (findProof 0 10 dseq) parsed
+        r <- liftM (head . take 1) $ runReaderT (findProof 0 maxDepth prems dseq) parsed
         print r
         return r) (handleRes q qi)
     -- enqueuePS qi tid
@@ -178,6 +184,10 @@ instance MonadState (Text, CalDescStore (FinTypeCalculusDescription r)) (AppM r)
     get = AppM $ \Config{..} -> readIORef currentCalcDec
 
 
+instance MonadReader (Config r) (AppM r) where
+    ask = AppM $ \c -> return c
+    local f m = AppM $ \c -> runAppM m (f c)
+
 
 -- since we use an ioref, the AppM is not really a Reader, because the value of
 -- the calculus description could change arbitrarily mid-computation, especially if there are
@@ -232,21 +242,24 @@ setCaclDescH :: CalcDesc -> AppM [Rule Text] Status
 setCaclDescH CalcDesc{..} = do
     cd <- parseFinTypeCalculusDescription rawCalc
     rules <- runReaderT (parseRules rawRules) cd
-
+    print rules
     put (name , CalDescStore cd{rules = rules} rawCalc rawRules)
     -- write the calc to a file
-    liftIO $ writeFile ("./calculi/" ++ toS name ++ ".calc") rawCalc
-    liftIO $ writeFile ("./calculi/" ++ toS name ++ ".rules") rawRules
+    cFolder <- asks calcFolder
+    print cFolder
+
+    liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".calc") rawCalc
+    liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".rules") rawRules
     return GUI.Success
 
 
-type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] Int
+type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
                  :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] ()
                  :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] [LatexPTDSeq]
 
 
-launchPSH :: DSequent 'ConcreteK Text -> AppM [Rule Text] Int
-launchPSH = runPS
+launchPSH :: (Int, Set (DSequent 'ConcreteK Text), DSequent 'ConcreteK Text) -> AppM [Rule Text] Int
+launchPSH (maxDepth, prems, dseq) = runPS maxDepth prems dseq
 
 cancelPSH :: Int -> AppM [Rule Text] ()
 cancelPSH = cancelPS
@@ -256,9 +269,9 @@ queryPSResultH i = do
     r <- tryDequeue i
     case r of
         Nothing -> return []
-        Just r -> do
+        Just r' -> do
             (_, CalDescStore{..}) <- get
-            return [map (LatexDSeq . (parsed,)) r]
+            return [map (LatexDSeq . (parsed,)) r']
 
 
 serverPS :: ServerT ProofSearchAPI (AppM [Rule Text])
@@ -298,8 +311,8 @@ runCalcIO env = \rT -> runReaderT rT env
 
 
 -- this hack needs to go at some point?? / rework to be safe...
-mkConfig :: Text -> Text -> IO (Config [Rule Text])
-mkConfig rawCalc rawRules = do
+mkConfig :: Text -> Text -> [Char] -> IO (Config [Rule Text])
+mkConfig rawCalc rawRules calcFolder = do
     c <- parseFinTypeCalculusDescription rawCalc
     rs <- runCalcIO c (parseRules rawRules)
     let parsed = c{rules = rs}
@@ -309,8 +322,8 @@ mkConfig rawCalc rawRules = do
     return Config{..}
 
 
-writeJSCode :: Int -> IO ()
-writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantApi.js"
+writeJSCode :: Int -> [Char] -> IO ()
+writeJSCode port jsFolder = writeJSForAPI api (vanillaJSWithNoCache) $ jsFolder
     where
         -- adds a Cache-Control header to the generator options, which results in
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
@@ -323,9 +336,10 @@ writeJSCode port = writeJSForAPI api (vanillaJSWithNoCache) "./gui/src/ServantAp
 
 main :: IO ()
 main = do
-    c <- readFile "calculi/Sequent.calc"
-    r <- readFile "calculi/Sequent.rules"
-    config <- mkConfig c r
-    writeJSCode 8081
+    [calcFolder, jsFolder] <- getArgs
+    c <- readFile $ calcFolder <> "/Sequent.calc"
+    r <- readFile $ calcFolder <> "/Sequent.rules"
+    config <- mkConfig c r calcFolder
+    writeJSCode 8081 jsFolder
     run 8081 $ app config
 

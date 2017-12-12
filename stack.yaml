@@ -4,4 +4,5 @@ packages:
 - .
 extra-deps:
 - pretty-tree-0.1.0.0
-resolver: nightly-2017-12-01
+resolver: lts-9.11
+local-bin-path: gui/haskell

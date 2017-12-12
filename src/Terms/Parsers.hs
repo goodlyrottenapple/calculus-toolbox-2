@@ -18,6 +18,7 @@ For more information on how to write Haddock comments check the user guide:
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module Terms.Parsers where
 
@@ -359,6 +360,8 @@ grammarRule = mdo
     exprSeq <- grammarDSeq
     lift $ rule $ (\n c -> Rule n [] c) <$> (bar *> rname) <*> exprSeq
             <|> (\ps n c -> Rule n ps c) <$> some exprSeq <*> (bar *> rname) <*> exprSeq
+            <|> (\p n c -> RevRule n p c) <$> exprSeq <*> (bar *> rname <* bar) <*> exprSeq
+            <|> (\p n c -> RevRule n p c) <$> exprSeq <*> (bar *> bar *> rname) <*> exprSeq
 
 
 
@@ -383,11 +386,11 @@ parseRules str = parse $ (splitRules . toS) str
             cd <- ask
             r' <- case fullParses (parser $ runReaderT grammarRule cd) $ tokenize $ r of
                 ([] , rep) -> throw $ TermParserError rep
-                (prules@(Rule{..}:_) , _) -> do
+                (prules@(r'':_) , _) -> do
                     prulesMetaMap <- (mapM typeableRule prules)
-                    fixed <- zipWithM (\m r'' -> fixRule m r'') prulesMetaMap prules
+                    fixed <- zipWithM (\m r''' -> fixRule m r''') prulesMetaMap prules
                     case fixed of
-                        []  -> throw $ RuleUntypeable name
+                        []  -> throw $ RuleUntypeable $ ruleName r''
                         [p] -> return p
                         ps' -> throw $ AmbiguousRuleParse ps'
             rs' <- parse rs

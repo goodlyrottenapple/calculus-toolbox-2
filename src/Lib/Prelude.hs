@@ -19,13 +19,14 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
 
 
 module Lib.Prelude
-    ( module Exports, MonadThrowJSON(..)
+    ( module Exports, MonadThrowJSON(..), SomeVec(..)
       , Length, Vec, vec, Copy, NotZ, pattern Nil, pattern (:>), eqLen, zipV, tlength
-      -- ,ElemAt, AppType(..)
-      -- ,(!), Vec(..), toVec
     ) where
 
 import           GHC.TypeLits
@@ -33,6 +34,7 @@ import           Protolude     as Exports
 import           Unsafe.Coerce (unsafeCoerce)
 
 import           Data.Aeson
+-- import           GHC.TypeNats (someNatVal)
 
 type family Length (l :: [k]) where
     Length '[] = 0
@@ -61,26 +63,32 @@ instance Foldable (Vec n) where
   foldr f b vs = foldr f b (unVec vs)
   toList = unVec
 
+-- tlength :: Foldable t => t a -> SomeNat
+-- tlength = GHC.TypeNats.someNatVal . toEnum . length
+
 tlength :: Foldable t => t a -> Maybe SomeNat
 tlength = someNatVal . toInteger . length
 
-vec :: KnownNat n => Proxy n -> [a] -> Maybe (Vec n a)
-vec p v | (fromIntegral $ natVal p) == length v = Just $ Vec (length v, v)
-        | otherwise = Nothing
+
+data SomeVec a = forall n. KnownNat n => SomeVec (Vec n a)
+
+vec :: [a] -> SomeVec a
+vec xs = case tlength xs of
+  Just (SomeNat (_ :: Proxy n)) -> SomeVec $ Vec @n (length xs, xs)
+  Nothing -> undefined
 
 
-nil :: Vec 0 a
-nil = Vec (0, [])
+-- nil :: Vec 0 a
+-- nil = Vec (0, [])
 
 unconsV :: (NotZ n ~ 'True) => Vec n a -> (a , Vec (n-1) a)
 unconsV (Vec (n, x:xs)) = (x, Vec (n-1, xs))
+unconsV _ = undefined
 
-consV :: a -> Vec n a -> Vec (n+1) a
-consV x (Vec (n, xs)) = Vec (n+1, x:xs)
 
 pattern Nil :: Vec 0 a
 pattern Nil <- Vec (0, []) where
-  Nil = nil
+  Nil = Vec (0, [])
 
 infixr :>
 
@@ -88,6 +96,10 @@ pattern (:>) :: NotZ n ~ 'True =>
   a -> Vec (n - 1) a -> Vec n a
 pattern x :> xs <- (unconsV -> (x,xs)) where
   x :> xs = unsafeCoerce $ consV x xs
+    where
+      consV :: a -> Vec n a -> Vec (n+1) a
+      consV y (Vec (n, ys)) = Vec (n+1, y:ys)
+
 
 zipV :: Vec n a -> Vec n b -> Vec n (a,b)
 zipV (Vec (n, as)) (Vec (_, bs)) = Vec $ (n , zip as bs)

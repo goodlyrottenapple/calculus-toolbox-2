@@ -19,14 +19,20 @@ export default class CalcDescription extends Component {
     this.updateRules = this.updateRules.bind(this)
     this.handleChange = this.handleChange.bind(this)
     this.saveCalc = this.saveCalc.bind(this)
+    this.getCalc()
   }
 
   componentWillReceiveProps(nextProps) {
-    if (nextProps.open) {
-      const success = (data) => this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
-      const error = (data) => console.log(data)
-      getCalcDesc('no-cache', success, error)
-    }
+    //if (nextProps.open) {
+      
+    //}
+    this.getCalc()
+  }
+
+  getCalc() {
+    const success = (data) => this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
+    const error = (data) => console.log(data)
+    getCalcDesc('no-cache', success, error)
   }
 
   handleChange = (e, { name, value }) => this.setState({ [name]: value })
@@ -41,11 +47,17 @@ export default class CalcDescription extends Component {
 
   saveCalc () {
     const success = (data) => {
-      this.props.onSave()
-      this.props.onClose()
+      //this.props.onSave()
+      //this.props.onClose()
+      const electron = window.require('electron');
+      const ipcRenderer = electron.ipcRenderer;
+
+      ipcRenderer.send('calcUpdate', `This message goes back to the main window.`);
+      console.log("this is called")
     }
     const error = (data) => console.log(data)
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
+
     postCalcDesc(body, 'private', success, error)
   }
   render() {
@@ -54,37 +66,35 @@ export default class CalcDescription extends Component {
       lineWrapping: true
     };
     return (
+      <div style={{padding:'20px'}}>
+      <Form>
+        <Form.Field>
+          <label>Calculus Name</label>
+          <Form.Input name="name" value={this.state.name} onChange={this.handleChange} />
+        </Form.Field>
 
-      <Modal size={'fullscreen'} dimmer={'blurring'} open={this.props.open}>
-        <Modal.Header>Modify the current calculus</Modal.Header>
-        <Modal.Content image>
-          <Modal.Description style={{maxWidth:'100%'}}>
-            <Form>
-              <Form.Field>
-                <label>Calculus Name</label>
-                <Form.Input name="name" value={this.state.name} onChange={this.handleChange} />
-              </Form.Field>
+        <Form.Field>
+          <label>Calculus Definition</label>
+          <CodeMirror className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={options}/>
+        </Form.Field>
 
-              <Form.Field>
-                <label>Calculus Definition</label>
-                <CodeMirror className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={options}/>
-              </Form.Field>
+        <Form.Field>
+          <label>Rules</label>
+          <CodeMirror className="codeArea" value={this.state.rules} onChange={this.updateRules} options={options}/>
+        </Form.Field>
 
-              <Form.Field>
-                <label>Rules</label>
-                <CodeMirror className="codeArea" value={this.state.rules} onChange={this.updateRules} options={options}/>
-              </Form.Field>
-            </Form>
-
-          </Modal.Description>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button negative onClick={this.props.onClose}>Cancel</Button>
-          <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save' />
-        </Modal.Actions>
-      </Modal>
-
-
+        <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save changes' />
+      </Form>
+      </div>
     )
   }
+
+
+  // </Modal.Description>
+  //       </Modal.Content>
+  //       <Modal.Actions>
+  //         <Button negative onClick={this.props.onClose}>Cancel</Button>
+  //         <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save' />
+  //       </Modal.Actions>
+  //     </Modal>
 }
