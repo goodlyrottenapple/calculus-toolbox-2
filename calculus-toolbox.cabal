@@ -22,8 +22,9 @@ library
                      , Rules
                      --, RulesInv
                      --, Terms.TH
-                     --, Terms.JSON
+                     , Terms.JSON
                      , Terms.Parsers
+                     , Terms.JSON
                      , GUI
   other-modules:       Lib.Prelude
   build-depends:       base >= 4.7 && < 5
