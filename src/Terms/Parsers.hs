@@ -110,6 +110,7 @@ tokenize :: P.String -> [P.String]
 tokenize ""        = []
 tokenize (' ':xs)  = tokenize xs
 tokenize ('\n':xs) = tokenize xs
+tokenize ('\r':xs) = tokenize xs
 tokenize ('"':xs)  = as : tokenize bs
   where
     (as, bs) = brackets xs
@@ -121,7 +122,7 @@ tokenize (x:xs)
   | otherwise             = (x:as) : tokenize bs
   where
     (as, bs) = break (`HS.member` special) xs
-    special = HS.fromList "(){}, \n"
+    special = HS.fromList "(){}, \n\r"
 
 
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
@@ -370,7 +371,7 @@ splitRules :: P.String -> [P.String]
 splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
     where
         emptyString :: P.String -> Bool
-        emptyString = (\x -> x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n"))
+        emptyString x = x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n")
 
 
 -- this version does not throw an error on ambiguous parse,
