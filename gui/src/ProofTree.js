@@ -193,7 +193,7 @@ export default class ProofTree extends Component {
     )
 
     const rules = this.state.possibleRules.map(([name,rules]) => 
-      <Button basic color="blue" onClick={() => this.addAbove({rule:name,sequents:rules})}>
+      <Button basic color="blue" style={{marginBottom: '-1px'}} onClick={() => this.addAbove({rule:name,sequents:rules})}>
         <List horizontal>
           <List.Item>
             <List.Content>{name}</List.Content>
@@ -211,7 +211,7 @@ export default class ProofTree extends Component {
     const addAboveModal =(
       <Modal dimmer={'blurring'} open={this.state.addingRules}>
         <Modal.Header>Select a Rule To Apply</Modal.Header>
-        <Modal.Content image>
+        <Modal.Content>
           <Modal.Description>
             <Button.Group vertical style={{width:"100%"}}>
               {rules}

@@ -16,6 +16,7 @@ class App extends Component {
 
   constructor() {
     super()
+
     this.state = {
       macros: {},
       name: '',
@@ -23,8 +24,10 @@ class App extends Component {
         latex : '',
         term: {}
       },
-      sidebarVisible: false
+      sidebarVisible: false,
+      //editWindow: win
     }
+
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
     this.mkPT = this.mkPT.bind(this)
@@ -35,6 +38,11 @@ class App extends Component {
 
   componentDidMount() {
     this.reloadMacros()
+    const ipcRenderer = window.require('electron').ipcRenderer;
+    ipcRenderer.on('updateMacros2', e => {
+        console.log("reloading Macros!"); // logs out "Hello second window!"
+        this.reloadMacros()
+    })
   }
 
   reloadMacros() {
@@ -66,23 +74,30 @@ class App extends Component {
   }
 
   openEdit() {
+
     const electron = window.require('electron');
+  
+    const remote = electron.remote;
+    const BrowserWindow = remote.BrowserWindow;
+    var win = new BrowserWindow({ width: 800, height: 600 });
+    win.loadURL('http://localhost:3000/edit');
+
+    win.on('closed', function () {
+        // Dereference the window object, usually you would store windows
+        // in an array if your app supports multi windows, this is the time
+        // when you should delete the corresponding element.
+        win = null
+    })
+
+
     //   // const fs = electron.remote.require('fs');
-    const ipcRenderer = electron.ipcRenderer;
+    
     //   const {dialog} = window.require('electron').remote
     //   console.log(dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
 
       // console.log(electron.dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
 
-      const remote = electron.remote;
-      const BrowserWindow = remote.BrowserWindow;
-      var win = new BrowserWindow({ width: 800, height: 600 });
-      win.loadURL('http://localhost:3000/edit');
-
-
-      ipcRenderer.on('calcUpdate', m => {
-          console.log(m); // logs out "Hello second window!"
-      })
+      
   }
 
   render() {
@@ -98,7 +113,7 @@ class App extends Component {
     const sidebarArea = (<Sidebar.Pushable as={Segment} style={{marginBottom: '0px', border:'0px'}}>
           <Sidebar
             as={Menu}
-            style={{borderTopWidth: '0px', borderBottomWidth: '0px'}}
+            style={{borderTopWidth: '0px', borderBottomWidth: '0px', borderRightWidth: '0px'}}
             animation='overlay'
             width='wide'
             direction='right'
@@ -121,7 +136,7 @@ class App extends Component {
             <div style={{paddingBottom: '30px'}}>
               {MainMenu}
               <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
-              <DocName style={{float:'right', margin:'18px'}} onEdit={this.updateName}/>
+              <DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
             </div>
             <div id="ProofTree">
               <ProofTree macros={this.state.macros} 
@@ -145,8 +160,8 @@ class App extends Component {
 
     return (
       <Switch>
-        <Route path="/edit" component={edit}/>
-        <Route path="/" component={main}/>
+        <Route path="/edit" render={edit}/>
+        <Route path="/" render={main}/>
       </Switch>
     );
   }

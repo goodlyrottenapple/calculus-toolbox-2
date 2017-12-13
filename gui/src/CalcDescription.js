@@ -50,10 +50,9 @@ export default class CalcDescription extends Component {
       //this.props.onSave()
       //this.props.onClose()
       const electron = window.require('electron');
-      const ipcRenderer = electron.ipcRenderer;
+      const {ipcRenderer} = electron;
 
-      ipcRenderer.send('calcUpdate', `This message goes back to the main window.`);
-      console.log("this is called")
+      ipcRenderer.send('updateMacros');
     }
     const error = (data) => console.log(data)
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }

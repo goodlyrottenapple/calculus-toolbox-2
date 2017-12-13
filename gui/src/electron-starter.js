@@ -24,6 +24,12 @@ function createWindow() {
     // Open the DevTools.
     mainWindow.webContents.openDevTools();
 
+    const {ipcMain} = require('electron')
+    ipcMain.on('updateMacros', e => {
+      console.log('updateMacros received');
+      mainWindow.webContents.send('updateMacros2');
+    });
+
     // Emitted when the window is closed.
     mainWindow.on('closed', function () {
         // Dereference the window object, usually you would store windows
