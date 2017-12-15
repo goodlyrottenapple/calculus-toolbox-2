@@ -22,7 +22,6 @@ library
                      , Rules
                      --, RulesInv
                      --, Terms.TH
-                     , Terms.JSON
                      , Terms.Parsers
                      , Terms.JSON
                      , GUI
