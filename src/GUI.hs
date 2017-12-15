@@ -42,7 +42,8 @@ import qualified Data.Map                    as M
 import Control.Monad.Except
 import Control.Monad.Reader
 -- import Text.Earley
-
+import System.IO (hSetNewlineMode, universalNewlineMode)
+import Data.Text.IO (hGetContents)
 
 data GUIError = CalculusDescriptionNotLoaded
               -- | TermParseE TermParseError
@@ -334,11 +335,21 @@ writeJSCode port jsFolder = writeJSForAPI api (vanillaJSWithNoCache) $ jsFolder
         myOptions = defCommonGeneratorOptions{urlPrefix = "http://localhost:" <> show port, Servant.JS.Internal.moduleName="exports"}
 
 
+-- converts line endings to \n to ensure consistent decoding...
+-- should fix issues with parsing?
+readFile' :: FilePath -> IO Text
+readFile' name = do
+    h <- openFile name ReadMode
+    hSetNewlineMode h universalNewlineMode 
+    hGetContents h
+
+
+
 main :: IO ()
 main = do
     [calcFolder, jsFolder] <- getArgs
-    c <- readFile $ calcFolder <> "/Sequent.calc"
-    r <- readFile $ calcFolder <> "/Sequent.rules"
+    c <- readFile' $ calcFolder <> "/Sequent.calc"
+    r <- readFile' $ calcFolder <> "/Sequent.rules"
     config <- mkConfig c r calcFolder
     writeJSCode 8081 jsFolder
     run 8081 $ app config

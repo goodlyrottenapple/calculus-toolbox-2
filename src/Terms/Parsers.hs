@@ -110,7 +110,6 @@ tokenize :: P.String -> [P.String]
 tokenize ""        = []
 tokenize (' ':xs)  = tokenize xs
 tokenize ('\n':xs) = tokenize xs
-tokenize ('\r':xs) = tokenize xs
 tokenize ('"':xs)  = as : tokenize bs
   where
     (as, bs) = brackets xs
@@ -122,7 +121,7 @@ tokenize (x:xs)
   | otherwise             = (x:as) : tokenize bs
   where
     (as, bs) = break (`HS.member` special) xs
-    special = HS.fromList "(){}, \n\r"
+    special = HS.fromList "(){}, \n"
 
 
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
