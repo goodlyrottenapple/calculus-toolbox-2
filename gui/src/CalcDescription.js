@@ -10,6 +10,7 @@ export default class CalcDescription extends Component {
 
   constructor() {
     super()
+    this.setMenu()
     this.state = {
       name : '',
       calc : '',
@@ -20,6 +21,19 @@ export default class CalcDescription extends Component {
     this.handleChange = this.handleChange.bind(this)
     this.saveCalc = this.saveCalc.bind(this)
     this.getCalc()
+  }
+
+  setMenu() {
+    const ipcRenderer = window.require('electron').ipcRenderer;
+    ipcRenderer.on('menu:open', e => {
+      console.log("open")
+    })
+    ipcRenderer.on('menu:save', function () {
+      console.log("save")
+    })
+    // ipcRenderer.on('menu:edit', e => {
+    //   this.openEdit();
+    // })
   }
 
   componentWillReceiveProps(nextProps) {

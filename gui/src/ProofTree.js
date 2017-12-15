@@ -39,7 +39,6 @@ export default class ProofTree extends Component {
     this.toJSON = this.toJSON.bind(this)  
   }
 
-
   componentWillReceiveProps(nextProps) {
     if (nextProps.sequent !== this.props.sequent)
       this.setState({

@@ -16,7 +16,7 @@ let backendServer
 
 function createWindow() {
     // Create the browser window.
-    mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600});
+    mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600, show: false});
 
     // and load the index.html of the app.
     mainWindow.loadURL('http://localhost:3000');
@@ -37,6 +37,11 @@ function createWindow() {
         // when you should delete the corresponding element.
         mainWindow = null
     })
+
+    mainWindow.on('ready-to-show', function() { 
+      mainWindow.show(); 
+      mainWindow.focus(); 
+    });
 }
 
 function createBackendServer () {
