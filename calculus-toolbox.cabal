@@ -49,17 +49,19 @@ library
                      , wai
                      , wai-cors
                      , warp
+                     , filepath
                      -- , exceptions
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude, DuplicateRecordFields
 
-executable calculus-toolbox-exe
+executable calculus-toolbox
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , calculus-toolbox
                      , protolude >= 0.1.6 && < 0.3
+                     , optparse-generic
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 

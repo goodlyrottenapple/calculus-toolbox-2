@@ -43,9 +43,11 @@ import Control.Monad.Except
 import Control.Monad.Reader
 -- import Text.Earley
 import System.IO (hSetNewlineMode, universalNewlineMode)
+import System.FilePath.Posix((</>), (<.>))
 import Data.Text.IO (hGetContents)
 
 data GUIError = CalculusDescriptionNotLoaded
+              | InvalidName Text
               -- | TermParseE TermParseError
               | Custom Text deriving (Show, Generic, ToJSON)
 
@@ -72,6 +74,7 @@ data CalDescStore c = CalDescStore {
   , rawRules :: Text
 }
 
+
 type PTDSeq = PT (DSequent 'ConcreteK Text)
 type LatexPTDSeq = PT (LatexDSeq [Rule Text] 'ConcreteK)
 
@@ -79,7 +82,7 @@ data Config r = Config {
     currentCalcDec :: IORef (Text, CalDescStore (FinTypeCalculusDescription r))
   , psQueue        :: IORef (IntMap (Either ThreadId (Maybe PTDSeq)))
   , psQueueCounter :: IORef Int
-  , calcFolder :: [Char]
+  , calcFolder     :: FilePath
 }
 
 
@@ -241,9 +244,10 @@ getCaclDescH = do
 
 setCaclDescH :: CalcDesc -> AppM [Rule Text] Status
 setCaclDescH CalcDesc{..} = do
+    if name == "" then throw $ InvalidName name else return ()
     cd <- parseFinTypeCalculusDescription rawCalc
     rules <- runReaderT (parseRules rawRules) cd
-    print rules
+    -- print rules
     put (name , CalDescStore cd{rules = rules} rawCalc rawRules)
     -- write the calc to a file
     cFolder <- asks calcFolder
@@ -312,19 +316,30 @@ runCalcIO env = \rT -> runReaderT rT env
 
 
 -- this hack needs to go at some point?? / rework to be safe...
-mkConfig :: Text -> Text -> [Char] -> IO (Config [Rule Text])
-mkConfig rawCalc rawRules calcFolder = do
+mkConfig :: Text -> Text -> Text -> FilePath -> IO (Config [Rule Text])
+mkConfig name rawCalc rawRules calcFolder = do
     c <- parseFinTypeCalculusDescription rawCalc
     rs <- runCalcIO c (parseRules rawRules)
     let parsed = c{rules = rs}
     psQueue <- newIORef $ IntMap.empty
-    currentCalcDec <- newIORef $ ("Sequent", CalDescStore{..})
+    currentCalcDec <- newIORef $ (name, CalDescStore{..})
+    psQueueCounter <- newIORef 1 -- js is stupid, so we start from 1
+    return Config{..}
+
+-- this hack needs to go at some point?? / rework to be safe...
+mkConfigEmpty :: FilePath -> IO (Config [Rule Text])
+mkConfigEmpty calcFolder = do
+    let rawCalc = ""
+        rawRules = ""
+        parsed = emptyFinTypeCalculusDescription []
+    psQueue <- newIORef $ IntMap.empty
+    currentCalcDec <- newIORef $ ("", CalDescStore{..})
     psQueueCounter <- newIORef 1 -- js is stupid, so we start from 1
     return Config{..}
 
 
 writeJSCode :: Int -> [Char] -> IO ()
-writeJSCode port jsFolder = writeJSForAPI api (vanillaJSWithNoCache) $ jsFolder
+writeJSCode port jsPath = writeJSForAPI api (vanillaJSWithNoCache) $ jsPath
     where
         -- adds a Cache-Control header to the generator options, which results in
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
@@ -345,12 +360,17 @@ readFile' name = do
 
 
 
-main :: IO ()
-main = do
-    [calcFolder, jsFolder] <- getArgs
-    c <- readFile' $ calcFolder <> "/Sequent.calc"
-    r <- readFile' $ calcFolder <> "/Sequent.rules"
-    config <- mkConfig c r calcFolder
-    writeJSCode 8081 jsFolder
+runGUI :: FilePath -> FilePath -> IO ()
+runGUI calcFolder calcName = do
+    -- [calcFolder, jsFolder] <- getArgs
+    c <- readFile' $ calcFolder </> (calcName System.FilePath.Posix.<.> "calc")
+    r <- readFile' $ calcFolder </> (calcName System.FilePath.Posix.<.> "rules")
+    config <- mkConfig (toS calcName) c r calcFolder
+    -- writeJSCode 8081 jsFolder
+    run 8081 $ app config
+
+runEmptyGUI :: FilePath -> IO ()
+runEmptyGUI calcFolder = do
+    config <- mkConfigEmpty calcFolder
     run 8081 $ app config
 

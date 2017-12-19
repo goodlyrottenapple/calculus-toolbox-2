@@ -40,6 +40,7 @@ import           Lib.Prelude
 import           Data.Map           (Map)
 import qualified Data.Map           as M
 import           Data.Set           (Set)
+import qualified Data.Set           as S
 import           Data.Singletons.TH
 import           Unsafe.Coerce      (unsafeCoerce)
 import           Data.Aeson
@@ -159,6 +160,10 @@ data FinTypeCalculusDescription r = Description {
   , structureConns :: [ConnDescription 'StructureL]
   , rules          :: r
 } deriving Show
+
+
+emptyFinTypeCalculusDescription :: r -> FinTypeCalculusDescription r
+emptyFinTypeCalculusDescription r = Description S.empty (Type "") [] [] r
 
 
 data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving (Show, Eq)

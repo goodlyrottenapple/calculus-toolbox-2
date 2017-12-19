@@ -127,6 +127,8 @@ tokenize (x:xs)
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | AmbiguousCalcDescParse (Report P.String [P.String])
                             | MultipleDefaultTypes
+                            | NoTypesDeclared
+                            | NoDefaultTypeDeclared
                             | SameNameConn Text
                             | SameParserSyntax Text Text
                             | IncorrectNoOfArgs Text Int Int -- the number of holes differs from the number of args expected
@@ -153,9 +155,16 @@ mkFinTypeCalculusDescription ps = do
 
     where
         -- onlyOneDefault :: [CalcFileParse] -> Except CalculusDescParseError CalcType
-        onlyOneDefault prs = case filter (\x -> case x of {(CalcTypeP True _) -> True ; _ -> False}) prs of
-            [CalcTypeP True t] -> return t
-            _                  -> throw MultipleDefaultTypes
+        onlyOneDefault prs = case calcTypes of
+            []              -> throw NoTypesDeclared
+            [CalcTypeP _ t] -> return t
+            _ -> case filter (\x -> case x of {(CalcTypeP True _) -> True ; _ -> False}) calcTypes of
+                [] -> throw NoDefaultTypeDeclared
+                [CalcTypeP True t] -> return t
+                _                  -> throw MultipleDefaultTypes
+
+            where
+                calcTypes = filter (\x -> case x of {(CalcTypeP _ _) -> True ; _ -> False}) prs
 
         extractTypes :: [CalcFileParse] -> [CalcType]
         extractTypes []                   = []
