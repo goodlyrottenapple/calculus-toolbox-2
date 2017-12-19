@@ -14,6 +14,26 @@
   color: white;
 }
 
+h1,h2,h3,h4,h5,h6 {
+  -webkit-user-select:none;
+}
+
+div.header, span.katex {
+  -webkit-user-select:none;
+  /*cursor:default;*/
+}
+
+
+div.header, div#BottomBar > div > span.katex {
+  cursor:default;
+}
+
+
+div.dropdown {
+  cursor: pointer
+}
+
+
 .App-title {
   font-size: 1.5em;
 }

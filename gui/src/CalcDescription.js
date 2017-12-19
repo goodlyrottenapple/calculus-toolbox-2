@@ -4,7 +4,7 @@ import { getCalcDesc , postCalcDesc } from './ServantApi.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
-import { Form, Modal, Button } from 'semantic-ui-react'
+import { Form, Button } from 'semantic-ui-react'
 
 export default class CalcDescription extends Component {
 
@@ -44,7 +44,10 @@ export default class CalcDescription extends Component {
   }
 
   getCalc() {
-    const success = (data) => this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
+    const success = (data) => {
+      console.log(data)
+      this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
+    }
     const error = (data) => console.log(data)
     getCalcDesc('no-cache', success, error)
   }
@@ -67,8 +70,9 @@ export default class CalcDescription extends Component {
       const {ipcRenderer} = electron;
 
       ipcRenderer.send('updateMacros');
+      alert("The calculus description has been succesfully saved");
     }
-    const error = (data) => console.log(data)
+    const error = (data) => alert(JSON.stringify(data));
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
 
     postCalcDesc(body, 'private', success, error)

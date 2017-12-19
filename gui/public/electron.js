@@ -7,6 +7,12 @@ const BrowserWindow = electron.BrowserWindow;
 
 const path = require('path');
 const url = require('url');
+const appRootDir = require('app-root-dir').get();
+
+const production = process.env.ELECTRON_START_URL === undefined
+
+const Store = require('electron-store');
+const store = new Store();
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -19,10 +25,17 @@ function createWindow() {
     mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600, show: false});
 
     // and load the index.html of the app.
-    mainWindow.loadURL('http://localhost:3000');
+
+    const startUrl = process.env.ELECTRON_START_URL || url.format({
+        pathname: path.join(__dirname, '/../build/index.html'),
+        protocol: 'file:',
+        slashes: true
+    });
+    mainWindow.loadURL(startUrl);
 
     // Open the DevTools.
-    mainWindow.webContents.openDevTools();
+    // if(production) 
+      mainWindow.webContents.openDevTools();
 
     const {ipcMain} = require('electron')
     ipcMain.on('updateMacros', e => {
@@ -45,15 +58,21 @@ function createWindow() {
 }
 
 function createBackendServer () {
-  backendServer = child_process.spawn('./haskell/calculus-toolbox-exe', ['../calculi', 'src/ServantApi.js']);
+  const execPath = production ?
+    path.join(path.dirname(appRootDir), 'bin'):
+    path.join(appRootDir, 'resources');
+
+  const cmd = path.join(execPath, 'calculus-toolbox');
+  // backendServer = child_process.spawn(cmd, ['gui', '--path', '../calculi', '--name' , 'Sequent']);
+  backendServer = child_process.spawn(cmd, ['gui', '--path', '../calculi']);
 
   backendServer.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
-    });
+    console.log(`stdout: ${data}`);
+  });
 
   backendServer.stderr.on('data', (data) => {
-      console.log(`stderr: ${data}`);
-    });
+    console.log(`stderr: ${data}`);
+  });
 }
 
 // Start the backend web server when Electron has finished initializing.

@@ -1,19 +1,17 @@
 
 import React, { Component } from 'react';
 import './App.css';
-import CalcDescription from './CalcDescription.js'
 import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
 import DocName from './DocName.js'
 
 import { getMacros } from './ServantApi.js'
+import urlPath from './url-path.js'
+import menuTemplate from './menu-template.js'
 
-import { Dropdown, Segment, Header, Image, Menu, Icon, Sidebar, Button } from 'semantic-ui-react'
-import { Route, Switch } from 'react-router-dom'
+import { Segment, Header, Menu, Sidebar, Button } from 'semantic-ui-react'
 
 export default class MainView extends Component {
-
-
   constructor() {
     super()
     this.setMenu();
@@ -25,8 +23,7 @@ export default class MainView extends Component {
         latex : '',
         term: {}
       },
-      sidebarVisible: false,
-      //editWindow: win
+      sidebarVisible: false
     }
 
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
@@ -36,95 +33,12 @@ export default class MainView extends Component {
     this.openEdit = this.openEdit.bind(this)
   }
 
-
   setMenu() {
     const electron = window.require('electron');
     const remote = electron.remote;
     const Menu = remote.Menu;
 
-    var template = require('./menu-template.js')
-
-
-    if (window.process.platform === 'darwin') {
-      console.log(electron.app)
-      const name = 'aaa' //app.getName()
-      template.unshift({
-        label: name,
-        submenu: [
-          {
-            role: 'about'
-          },
-          {
-            type: 'separator'
-          },
-          {
-            role: 'services',
-            submenu: []
-          },
-          {
-            type: 'separator'
-          },
-          {
-            role: 'hide'
-          },
-          {
-            role: 'hideothers'
-          },
-          {
-            role: 'unhide'
-          },
-          {
-            type: 'separator'
-          },
-          {
-            role: 'quit'
-          }
-        ]
-      })
-      // Edit menu.
-      template[2].submenu.push(
-        {
-          type: 'separator'
-        },
-        {
-          label: 'Speech',
-          submenu: [
-            {
-              role: 'startspeaking'
-            },
-            {
-              role: 'stopspeaking'
-            }
-          ]
-        }
-      )
-      // Window menu.
-      template[4].submenu = [
-        {
-          label: 'Close',
-          accelerator: 'CmdOrCtrl+W',
-          role: 'close'
-        },
-        {
-          label: 'Minimize',
-          accelerator: 'CmdOrCtrl+M',
-          role: 'minimize'
-        },
-        {
-          label: 'Zoom',
-          role: 'zoom'
-        },
-        {
-          type: 'separator'
-        },
-        {
-          label: 'Bring All to Front',
-          role: 'front'
-        }
-      ]
-    }
-
-    const menu = Menu.buildFromTemplate(template);
+    const menu = Menu.buildFromTemplate(menuTemplate());
     Menu.setApplicationMenu(menu);
 
     const ipcRenderer = window.require('electron').ipcRenderer;
@@ -132,12 +46,50 @@ export default class MainView extends Component {
       console.log("open")
       console.log(this.state)
     })
-    ipcRenderer.on('menu:save', function () {
-      console.log("save")
+
+    const saveAs = () => {
+      const {dialog} = window.require('electron').remote;
+      dialog.showSaveDialog(
+        window.require('electron').remote.getCurrentWindow(),
+        {
+          filters: [
+            { name: 'Calculus Session', extensions: ['session'] }
+          ]
+        },
+        (fileName) => {
+          if (fileName === undefined){
+              console.log("You didn't save the file");
+              return;
+          }
+          this.setState({saveFile: fileName});
+          this.saveSession(fileName);
+        }
+      );
+    }
+
+
+    ipcRenderer.on('menu:save', e => {
+      if(this.state.saveFile === undefined) saveAs();
+      else this.saveSession(this.state.saveFile);
     })
+
+    ipcRenderer.on('menu:saveAs', e => saveAs())
+
     ipcRenderer.on('menu:edit', e => {
       this.openEdit();
     })
+  }
+
+  saveSession(file) {
+    const fs = window.require('fs')
+    const content = JSON.stringify( this.pt.toJSON() );
+
+    fs.writeFile(file, content, (err) => {
+      if(err){
+          alert("An error ocurred creating the file "+ err.message)
+      }       
+      // alert("The session has been succesfully saved");
+    });
   }
 
   componentDidMount() {
@@ -184,28 +136,18 @@ export default class MainView extends Component {
 
     const BrowserWindow = remote.BrowserWindow;
     var win = new BrowserWindow({ width: 800, height: 600 });
-    win.loadURL('http://localhost:3000/edit');
+
+    // console.log(urlPath('/edit'))
+    win.loadURL(urlPath('/edit'));
     win.setMenu(null);
 
-    const current = remote.getCurrentWindow();
+    // const current = remote.getCurrentWindow();
     win.on('close', function () {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
         // win.removeAllListeners();
-        win = null
-        
-        // this is really hacky, but it's the only way menus work after closing the edit window
-        //but keeping the main window open...
-        // const electron = window.require('electron');
-        // const remote = electron.remote;
-        // const Menu = remote.Menu;
-
-        // var template = require('./menu-template.js')
-
-        // const menu = Menu.buildFromTemplate(template);
-        // Menu.setApplicationMenu(menu);
-
+      win = null
     })
 
 
@@ -245,50 +187,51 @@ export default class MainView extends Component {
 
 
   render() {
-    const MainMenu = (
-      <Dropdown id="mainMenu" text='Menu' floating>
-        <Dropdown.Menu>
-          <Dropdown.Item onClick={() => this.newWindow()}>Load Calculus</Dropdown.Item>
-          <Dropdown.Item onClick={this.openEdit}>Modify Calculus</Dropdown.Item>
-        </Dropdown.Menu>
-      </Dropdown>
-    )
+    // const MainMenu = (
+    //   <Dropdown id="mainMenu" text='Menu' floating>
+    //     <Dropdown.Menu>
+    //       <Dropdown.Item onClick={() => this.newWindow()}>Load Calculus</Dropdown.Item>
+    //       <Dropdown.Item onClick={this.openEdit}>Modify Calculus</Dropdown.Item>
+    //     </Dropdown.Menu>
+    //   </Dropdown>
+    // )
 
     const sidebarArea = (<Sidebar.Pushable as={Segment} style={{marginBottom: '0px', border:'0px'}}>
-          <Sidebar
-            as={Menu}
-            style={{borderTopWidth: '0px', borderBottomWidth: '0px', borderRightWidth: '0px'}}
-            animation='overlay'
-            width='wide'
-            direction='right'
-            visible={this.state.sidebarVisible}
-            icon='labeled'
-            vertical
-          >
-            <Button style={{float:'right', margin:'10px'}} basic circular icon='close' onClick={() => this.toggle('sidebarVisible')} />
-            <div style={{margin:'10px'}}>
-              <Header style={{marginTop:'56px'}} textAlign='left' size='tiny'>Assumptions</Header>
+      <Sidebar
+        as={Menu}
+        style={{borderTopWidth: '0px', borderBottomWidth: '0px', borderRightWidth: '0px'}}
+        animation='overlay'
+        width='wide'
+        direction='right'
+        visible={this.state.sidebarVisible}
+        icon='labeled'
+        vertical
+      >
+        <Button style={{float:'right', margin:'10px'}} basic circular icon='close' onClick={() => this.toggle('sidebarVisible')} />
+        <div style={{margin:'10px'}}>
+          <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Assumptions</Header>
 
-              <Segment.Group >
-                <Segment>Nested Top</Segment>
-                <Segment>Nested Middle</Segment>
-                <Segment>Nested Bottom</Segment>
-              </Segment.Group>
-            </div>
-          </Sidebar>
-          <Sidebar.Pusher style={{minHeight: '100vh'}}>
-            <div style={{paddingBottom: '30px'}}>
-              <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
-              <DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
-            </div>
-            <div id="ProofTree">
-              <ProofTree macros={this.state.macros} 
-                         sequent={this.state.ptSequent} 
-                         saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
-                         rule=""/>
-            </div>
-          </Sidebar.Pusher>
-        </Sidebar.Pushable>)
+          <Segment.Group >
+            <Segment>Nested Top</Segment>
+            <Segment>Nested Middle</Segment>
+            <Segment>Nested Bottom</Segment>
+          </Segment.Group>
+        </div>
+      </Sidebar>
+      <Sidebar.Pusher style={{minHeight: '100vh'}}>
+        <div style={{paddingBottom: '30px'}}>
+          <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
+          <DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
+        </div>
+        <div id="ProofTree">
+          <ProofTree macros={this.state.macros} 
+                     sequent={this.state.ptSequent} 
+                     saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
+                     rule=""
+                     ref={(node) => {this.pt = node}} />
+        </div>
+      </Sidebar.Pusher>
+    </Sidebar.Pushable>)
 
     return <div className="App">
         {sidebarArea}

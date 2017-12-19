@@ -1,8 +1,6 @@
 import React, {Component} from 'react'
 import './DocName.css';
 
-import { Input } from 'semantic-ui-react'
-
 export default class DocName extends Component {
   static defaultProps = {
   	name: 'Untitled',
