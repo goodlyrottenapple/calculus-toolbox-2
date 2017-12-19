@@ -21,4 +21,4 @@ cabal.project.local
 .DS_Store
 *.calc
 *.rules
-gui/haskell
+gui/resources
