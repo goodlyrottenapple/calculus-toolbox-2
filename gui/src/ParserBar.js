@@ -44,7 +44,7 @@ export default class ParserBar extends Component {
       console.log(data)
       this.setState({ parseError: "error" })
     }
-    getParseDSeq(e.target.value, 'no-cache', success, error)
+    getParseDSeq(8081, e.target.value, 'no-cache', success, error)
   }
 
   render() {

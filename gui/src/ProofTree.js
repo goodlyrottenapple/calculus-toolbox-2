@@ -73,7 +73,7 @@ export default class ProofTree extends Component {
       this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
-    postApplicableRules(this.props.sequent.term, 'private', success, error)
+    postApplicableRules(8081, this.props.sequent.term, 'private', success, error)
   }
 
   runPS() {
@@ -85,7 +85,7 @@ export default class ProofTree extends Component {
     }
     const error = (data) => console.log(data)
     // 15 is the proof depth parameter
-    postLaunchPS([15,[],this.props.sequent.term], 'private', success, error)
+    postLaunchPS(8081, [15,[],this.props.sequent.term], 'private', success, error)
   }
 
   pollPS() {
@@ -104,7 +104,7 @@ export default class ProofTree extends Component {
       }
     }
     const error = (data) => console.log(data)
-    postQueryPSResult(this.state.psId, 'private', success, error)
+    postQueryPSResult(8081, this.state.psId, 'private', success, error)
   }
 
   appendPT(pt) {
@@ -126,7 +126,7 @@ export default class ProofTree extends Component {
       console.log(data)
     }
     const error = (data) => console.log(data)
-    postCancelPS(this.state.psId, 'private', success, error)
+    postCancelPS(8081, this.state.psId, 'private', success, error)
   }
 
   toJSON() {

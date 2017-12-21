@@ -26,7 +26,7 @@ export default () => {
           }
         },
         {
-          label: "Modify Calculus",
+          label: "Add/Modify Calculus",
           click: function (item, focusedWindow) {
             focusedWindow.send('menu:edit')
           }
@@ -143,6 +143,16 @@ export default () => {
             type: 'separator'
           },
           {
+            label: "Preferences",
+            click: function (item, focusedWindow) {
+            // tell the focused window to tell the app to open the config
+              focusedWindow.send('menu:prefs')
+            }
+          },
+          {
+            type: 'separator'
+          },
+          {
             role: 'hide'
           },
           {
@@ -200,6 +210,16 @@ export default () => {
           role: 'front'
         }
       ]
+    } else {
+      template[2].submenu.push(
+        {
+          label: "Preferences",
+          click: function (item, focusedWindow) {
+          // tell the focused window to tell the app to open the config
+            focusedWindow.send('menu:prefs')
+          }
+        }
+      )
     }
 
     return template;

@@ -6,7 +6,7 @@ import ParserBar from './ParserBar.js'
 import DocName from './DocName.js'
 
 import { getMacros } from './ServantApi.js'
-import urlPath from './url-path.js'
+import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
 
 import { Segment, Header, Menu, Sidebar, Button } from 'semantic-ui-react'
@@ -25,7 +25,6 @@ export default class MainView extends Component {
       },
       sidebarVisible: false
     }
-
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
     this.mkPT = this.mkPT.bind(this)
@@ -78,6 +77,10 @@ export default class MainView extends Component {
     ipcRenderer.on('menu:edit', e => {
       this.openEdit();
     })
+
+    ipcRenderer.on('menu:prefs', e => {
+      this.openPrefs();
+    })
   }
 
   saveSession(file) {
@@ -104,7 +107,7 @@ export default class MainView extends Component {
   reloadMacros() {
     const success = (data) => this.setState({ macros: data })
     const failure = (data) => console.log(data)
-    getMacros('private', success, failure)
+    getMacros(getPort(), 'private', success, failure)
   }
 
   handleErrors(response) {
@@ -135,10 +138,10 @@ export default class MainView extends Component {
     const remote = electron.remote;
 
     const BrowserWindow = remote.BrowserWindow;
-    var win = new BrowserWindow({ width: 800, height: 600 });
+    var win = new BrowserWindow({ width: 800, height: 700, title:"Modify calculus" });
 
-    // console.log(urlPath('/edit'))
-    win.loadURL(urlPath('/edit'));
+
+    win.loadURL(urlPath('/edit/'+getPort()));
     win.setMenu(null);
 
     // const current = remote.getCurrentWindow();
@@ -159,6 +162,22 @@ export default class MainView extends Component {
       // console.log(electron.dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
 
       
+  }
+
+  openPrefs() {
+    const electron = window.require('electron');
+  
+    const remote = electron.remote;
+
+    const BrowserWindow = remote.BrowserWindow;
+    var win = new BrowserWindow({ width: 800, height: 600, title:"Modify calculus" });
+
+    win.loadURL(urlPath('/preferences/initial'));
+    win.setMenu(null);
+
+    win.on('close', function () {
+      win = null
+    })      
   }
 
 

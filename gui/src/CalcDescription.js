@@ -1,6 +1,7 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
 import { getCalcDesc , postCalcDesc } from './ServantApi.js'
+import { getPort } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
@@ -8,8 +9,8 @@ import { Form, Button } from 'semantic-ui-react'
 
 export default class CalcDescription extends Component {
 
-  constructor() {
-    super()
+  constructor(props) {
+    super(props)
     this.setMenu()
     this.state = {
       name : '',
@@ -49,7 +50,7 @@ export default class CalcDescription extends Component {
       this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
     }
     const error = (data) => console.log(data)
-    getCalcDesc('no-cache', success, error)
+    getCalcDesc(this.props.port, 'no-cache', success, error)
   }
 
   handleChange = (e, { name, value }) => this.setState({ [name]: value })
@@ -75,7 +76,7 @@ export default class CalcDescription extends Component {
     const error = (data) => alert(JSON.stringify(data));
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
 
-    postCalcDesc(body, 'private', success, error)
+    postCalcDesc(getPort(), body, 'private', success, error)
   }
   render() {
     const options = {

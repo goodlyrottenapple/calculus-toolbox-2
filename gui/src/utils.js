@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { format } from 'url';
 
-export default (p) => {
+function urlPath(p) {
   var editUrl;
   if (window.process.env.ELECTRON_START_URL) 
     editUrl = join(window.process.env.ELECTRON_START_URL , "#", p)
@@ -13,4 +13,10 @@ export default (p) => {
       slashes: true
     });
   return editUrl;
-};
+}
+
+function getPort() {
+  return window.require('electron').remote.getCurrentWindow().port
+}
+
+export { urlPath, getPort }

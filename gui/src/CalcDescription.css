@@ -11,6 +11,8 @@
   	-webkit-font-smoothing: antialiased;
   	text-rendering: optimizeLegibility;
     /*border-top-left-radius: 4px;*/
+        height: calc(50vh - 115px);
+    min-height: 200px;
 }
 
 .codeArea > div > div:first-child {
