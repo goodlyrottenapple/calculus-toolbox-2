@@ -25,7 +25,6 @@ import           Network.Wai.Middleware.Cors
 import           Servant
 import           Servant.JS
 import           Servant.JS.Custom
--- import           Servant.Foreign
 import           Data.Aeson
 import           Data.IORef
 import           Servant.JS.Internal
@@ -44,26 +43,23 @@ import Control.Monad.Except
 import Control.Monad.Reader
 -- import Text.Earley
 import System.IO (hSetNewlineMode, universalNewlineMode)
-import System.FilePath.Posix((</>), (<.>))
+import System.FilePath.Posix((</>), (<.>), dropExtension, takeExtension)
 import Data.Text.IO (hGetContents)
-import System.Directory(listDirectory)
+import System.Directory(listDirectory, removeFile, doesFileExist)
 
 data GUIError = CalculusDescriptionNotLoaded
               | InvalidName Text
+              | FileDoesNotExist FilePath
               -- | TermParseE TermParseError
               | Custom Text deriving (Show, Generic, ToJSON)
 
 deriving instance Exception GUIError
 
-data Status = Success deriving (Generic, ToJSON)
-
 
 type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
       :<|> "macros" :> Get '[JSON] Macros
       :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
-      :<|> "calcDesc" :> Get '[JSON] CalcDesc
-      :<|> "calcDesc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] Status
-      :<|> "listCalculi" :> Get '[JSON] [FilePath]
+      :<|> CalculusDescriptionAPI
       :<|> ProofSearchAPI
 
 
@@ -237,16 +233,21 @@ getApplicableRulesH dseq = freeze $ do
     return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
 
 
+type CalculusDescriptionAPI = "calcDesc" :> Get '[JSON] CalcDesc
+                         :<|> "modifyCalc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] ()
+                         :<|> "deleteCalc" :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
+                         :<|> "loadCalc" :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
+                         :<|> "listCalculi" :> Get '[JSON] [FilePath]
 
-getCaclDescH :: AppM r CalcDesc
-getCaclDescH = do
+
+caclDescH :: AppM r CalcDesc
+caclDescH = do
     (name, CalDescStore{..}) <- get
     return $ CalcDesc name rawCalc rawRules
 
 
-
-setCaclDescH :: CalcDesc -> AppM [Rule Text] Status
-setCaclDescH CalcDesc{..} = do
+modifyCalcH :: CalcDesc -> AppM [Rule Text] ()
+modifyCalcH CalcDesc{..} = do
     if name == "" then throw $ InvalidName name else return ()
     cd <- parseFinTypeCalculusDescription rawCalc
     rules <- runReaderT (parseRules rawRules) cd
@@ -258,12 +259,50 @@ setCaclDescH CalcDesc{..} = do
 
     liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".calc") rawCalc
     liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".rules") rawRules
-    return GUI.Success
+
+
+deleteCalcH :: FilePath -> AppM r ()
+deleteCalcH f = do
+    workDir <- asks calcFolder
+    deleteFile $ workDir </> f System.FilePath.Posix.<.> "calc"
+    deleteFile $ workDir </> f System.FilePath.Posix.<.> "rules"
+
+    where
+        deleteFile file = do
+            exists <- liftIO $ doesFileExist $ file
+            if exists then liftIO $ removeFile file else throw $ FileDoesNotExist file
+
+loadCalcH :: FilePath -> AppM [Rule Text] ()
+loadCalcH f = do
+    workDir <- asks calcFolder
+    rawCalc <- readF $ workDir </> f System.FilePath.Posix.<.> "calc"
+    rawRules <- readF $ workDir </> f System.FilePath.Posix.<.> "rules"
+    cd <- parseFinTypeCalculusDescription rawCalc
+    rules <- runReaderT (parseRules rawRules) cd
+    -- print rules
+    put (toS f , CalDescStore cd{rules = rules} rawCalc rawRules)
+
+    where
+        readF file = do
+            exists <- liftIO $ doesFileExist $ file
+            if exists then liftIO $ readFile' file else throw $ FileDoesNotExist file
+
 
 listCalculiH :: AppM r [FilePath]
 listCalculiH = do
     workDir <- asks calcFolder
-    liftIO $ listDirectory workDir
+    cs <- liftIO $ listDirectory workDir
+    let cs' = filter (\x -> takeExtension x  == ".calc" || takeExtension x  == ".rules") cs
+    return $ (filterCalc . sort . map dropExtension) cs'
+
+    where
+        filterCalc [] = []
+        filterCalc [_] = []
+        filterCalc (x:y:xs) | x == y = x : filterCalc xs
+        filterCalc (_:y:xs) | otherwise = filterCalc (y:xs)
+
+serverCalcDesc :: ServerT CalculusDescriptionAPI (AppM [Rule Text])
+serverCalcDesc = caclDescH :<|> modifyCalcH :<|> deleteCalcH :<|> loadCalcH :<|> listCalculiH
 
 
 type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
@@ -299,8 +338,7 @@ readerServer :: Config [Rule Text] -> Server API
 readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
-server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH
-    :<|> listCalculiH :<|> serverPS
+server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> serverCalcDesc :<|> serverPS
 
 myCors :: Middleware
 myCors = cors $ const $ Just customPolicy
@@ -334,6 +372,7 @@ mkConfig name rawCalc rawRules calcFolder = do
     psQueueCounter <- newIORef 1 -- js is stupid, so we start from 1
     return Config{..}
 
+
 -- this hack needs to go at some point?? / rework to be safe...
 mkConfigEmpty :: FilePath -> IO (Config [Rule Text])
 mkConfigEmpty calcFolder = do
@@ -347,14 +386,14 @@ mkConfigEmpty calcFolder = do
 
 
 writeJSCode :: [Char] -> IO ()
-writeJSCode jsPath = writeJSForAPI api (customJSWithNoCache) $ jsPath
+writeJSCode jsPath = writeJSForAPI api (customJSWith myOptions) $ jsPath
     where
         -- adds a Cache-Control header to the generator options, which results in
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
         -- being added to all the JS functions
-        customJSWithNoCache :: [Req NoContent] -> Text
-        customJSWithNoCache xs = customJSWith myOptions $ runIdentity $ mapM
-            (reqHeaders $ Identity . ((HeaderArg $ Arg (PathSegment "Cache-Control") NoContent):)) xs
+        -- customJSWithNoCache :: [Req NoContent] -> Text
+        -- customJSWithNoCache xs = customJSWith myOptions $ runIdentity $ mapM
+        --     (reqHeaders $ Identity . ((HeaderArg $ Arg (PathSegment "Cache-Control") NoContent):)) xs
         myOptions = defCommonGeneratorOptions{
             urlPrefix = "http://localhost:${port}", 
             Servant.JS.Internal.moduleName="exports"}
@@ -370,17 +409,17 @@ readFile' name = do
 
 
 
-runGUI :: FilePath -> FilePath -> IO ()
-runGUI calcFolder calcName = do
+runGUI :: FilePath -> FilePath -> Int -> IO ()
+runGUI calcFolder calcName port = do
     -- [calcFolder, jsFolder] <- getArgs
-    c <- readFile' $ calcFolder </> (calcName System.FilePath.Posix.<.> "calc")
-    r <- readFile' $ calcFolder </> (calcName System.FilePath.Posix.<.> "rules")
+    c <- readFile' $ calcFolder </> calcName System.FilePath.Posix.<.> "calc"
+    r <- readFile' $ calcFolder </> calcName System.FilePath.Posix.<.> "rules"
     config <- mkConfig (toS calcName) c r calcFolder
     -- writeJSCode 8081 jsFolder
-    run 8081 $ app config
+    run port $ app config
 
-runEmptyGUI :: FilePath -> IO ()
-runEmptyGUI calcFolder = do
+runEmptyGUI :: FilePath -> Int -> IO ()
+runEmptyGUI calcFolder port = do
     config <- mkConfigEmpty calcFolder
-    run 8081 $ app config
+    run port $ app config
 

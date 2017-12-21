@@ -21,6 +21,7 @@ generateCustomJSWith opts req = "\n" <>
  <> "  var xhr = new XMLHttpRequest();\n"
  <> "  xhr.open('" <> decodeUtf8 method <> "', " <> url <> ", true);\n"
  <>    reqheaders
+ <> "  xhr.setRequestHeader('Cache-Control', 'no-cache');\n"
  <> "  xhr.setRequestHeader('Accept', 'application/json');\n"
  <> (if isJust (req ^. reqBody) then "  xhr.setRequestHeader('Content-Type', 'application/json');\n" else "")
  <> "  xhr.onreadystatechange = function () {\n"

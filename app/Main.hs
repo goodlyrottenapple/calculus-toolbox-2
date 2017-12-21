@@ -7,7 +7,7 @@ import qualified GUI
 import Options.Generic
 
 data CmdLineOpts = GenerateServantApi FilePath
-                 | Gui { path :: FilePath , calc :: Maybe FilePath }
+                 | Gui { port :: Int , path :: FilePath , calc :: Maybe FilePath }
     deriving (Generic, Show)
 
 instance ParseRecord CmdLineOpts
@@ -16,9 +16,9 @@ main :: IO ()
 main = do
     x <- getRecord "Calculus Toolbox 2"
     case (x :: CmdLineOpts) of
-        Gui p (Just n) -> GUI.runGUI p n
-        Gui p Nothing -> do
+        Gui prt p (Just n) -> GUI.runGUI p n prt
+        Gui prt p Nothing -> do
             print ("Launching empty gui" :: Text)
-            GUI.runEmptyGUI p
+            GUI.runEmptyGUI p prt
         GenerateServantApi p -> GUI.writeJSCode p
 
