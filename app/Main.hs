@@ -7,7 +7,7 @@ import qualified GUI
 import Options.Generic
 
 data CmdLineOpts = GenerateServantApi FilePath
-                 | Gui { path :: FilePath , name :: Maybe FilePath }
+                 | Gui { path :: FilePath , calc :: Maybe FilePath }
     deriving (Generic, Show)
 
 instance ParseRecord CmdLineOpts
@@ -20,5 +20,5 @@ main = do
         Gui p Nothing -> do
             print ("Launching empty gui" :: Text)
             GUI.runEmptyGUI p
-        GenerateServantApi p -> GUI.writeJSCode 8081 p
+        GenerateServantApi p -> GUI.writeJSCode p
 

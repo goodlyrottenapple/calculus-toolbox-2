@@ -26,6 +26,7 @@ library
                      , Terms.JSON
                      , GUI
   other-modules:       Lib.Prelude
+                     , Servant.JS.Custom
   build-depends:       base >= 4.7 && < 5
                      , protolude >= 0.1.6 && < 0.3
                      , array
@@ -50,6 +51,9 @@ library
                      , wai-cors
                      , warp
                      , filepath
+                     , directory
+                     , lens
+                     , servant-foreign
                      -- , exceptions
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude, DuplicateRecordFields

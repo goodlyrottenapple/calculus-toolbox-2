@@ -24,6 +24,7 @@ import           Network.Wai.Middleware.Cors
 
 import           Servant
 import           Servant.JS
+import           Servant.JS.Custom
 -- import           Servant.Foreign
 import           Data.Aeson
 import           Data.IORef
@@ -45,6 +46,7 @@ import Control.Monad.Reader
 import System.IO (hSetNewlineMode, universalNewlineMode)
 import System.FilePath.Posix((</>), (<.>))
 import Data.Text.IO (hGetContents)
+import System.Directory(listDirectory)
 
 data GUIError = CalculusDescriptionNotLoaded
               | InvalidName Text
@@ -61,6 +63,7 @@ type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule 
       :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
       :<|> "calcDesc" :> Get '[JSON] CalcDesc
       :<|> "calcDesc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] Status
+      :<|> "listCalculi" :> Get '[JSON] [FilePath]
       :<|> ProofSearchAPI
 
 
@@ -177,7 +180,7 @@ instance MonadIO (AppM r) where
     liftIO ioa = AppM (\_ -> ioa)
 
 instance MonadThrowJSON (AppM r) where
-    throw e = throwIO $ err300 {errBody = encode e }
+    throw e = throwIO $ err400 {errBody = encode e }
 
 instance MonadThrowJSON IO where
     throw e = throwIO e
@@ -257,6 +260,11 @@ setCaclDescH CalcDesc{..} = do
     liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".rules") rawRules
     return GUI.Success
 
+listCalculiH :: AppM r [FilePath]
+listCalculiH = do
+    workDir <- asks calcFolder
+    liftIO $ listDirectory workDir
+
 
 type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
                  :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] ()
@@ -292,7 +300,7 @@ readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
 server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> getCaclDescH :<|> setCaclDescH
-    :<|> serverPS
+    :<|> listCalculiH :<|> serverPS
 
 myCors :: Middleware
 myCors = cors $ const $ Just customPolicy
@@ -338,16 +346,18 @@ mkConfigEmpty calcFolder = do
     return Config{..}
 
 
-writeJSCode :: Int -> [Char] -> IO ()
-writeJSCode port jsPath = writeJSForAPI api (vanillaJSWithNoCache) $ jsPath
+writeJSCode :: [Char] -> IO ()
+writeJSCode jsPath = writeJSForAPI api (customJSWithNoCache) $ jsPath
     where
         -- adds a Cache-Control header to the generator options, which results in
         -- xhr.setRequestHeader("Cache-Control", headerCacheControl);
         -- being added to all the JS functions
-        vanillaJSWithNoCache :: [Req NoContent] -> Text
-        vanillaJSWithNoCache xs = vanillaJSWith myOptions $ runIdentity $ mapM
+        customJSWithNoCache :: [Req NoContent] -> Text
+        customJSWithNoCache xs = customJSWith myOptions $ runIdentity $ mapM
             (reqHeaders $ Identity . ((HeaderArg $ Arg (PathSegment "Cache-Control") NoContent):)) xs
-        myOptions = defCommonGeneratorOptions{urlPrefix = "http://localhost:" <> show port, Servant.JS.Internal.moduleName="exports"}
+        myOptions = defCommonGeneratorOptions{
+            urlPrefix = "http://localhost:${port}", 
+            Servant.JS.Internal.moduleName="exports"}
 
 
 -- converts line endings to \n to ensure consistent decoding...
