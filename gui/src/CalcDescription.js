@@ -1,6 +1,6 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
-import { getCalcDesc , postCalcDesc } from './ServantApi.js'
+import { getCalcDesc , postModifyCalc } from './ServantApi.js'
 import { getPort } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
@@ -76,7 +76,7 @@ export default class CalcDescription extends Component {
     const error = (data) => alert(JSON.stringify(data));
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
 
-    postCalcDesc(getPort(), body, 'private', success, error)
+    postModifyCalc(this.props.port, body, success, error)
   }
   render() {
     const options = {

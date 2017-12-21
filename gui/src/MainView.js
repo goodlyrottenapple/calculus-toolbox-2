@@ -5,7 +5,7 @@ import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
 import DocName from './DocName.js'
 
-import { getMacros } from './ServantApi.js'
+import { getMacros , getListCalculi } from './ServantApi.js'
 import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
 
@@ -78,6 +78,10 @@ export default class MainView extends Component {
       this.openEdit();
     })
 
+    ipcRenderer.on('menu:switch', e => {
+      this.switchCalc();
+    })
+
     ipcRenderer.on('menu:prefs', e => {
       this.openPrefs();
     })
@@ -107,7 +111,7 @@ export default class MainView extends Component {
   reloadMacros() {
     const success = (data) => this.setState({ macros: data })
     const failure = (data) => console.log(data)
-    getMacros(getPort(), 'private', success, failure)
+    getMacros(getPort(), success, failure)
   }
 
   handleErrors(response) {
@@ -181,6 +185,13 @@ export default class MainView extends Component {
   }
 
 
+  switchCalc() {
+    const success = (data) => console.log(data)
+    const failure = (data) => console.log(data)
+    getListCalculi(getPort(), success, failure)
+  }
+
+
   // implement navigation using arrow keys? will be a pain ...
 
   // _handleKeyDown (event) {
@@ -240,21 +251,24 @@ export default class MainView extends Component {
       <Sidebar.Pusher style={{minHeight: '100vh'}}>
         <div style={{paddingBottom: '30px'}}>
           <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
-          <DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
+          
         </div>
         <div id="ProofTree">
           <ProofTree macros={this.state.macros} 
                      sequent={this.state.ptSequent} 
                      saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
                      rule=""
+                     port={getPort()}
                      ref={(node) => {this.pt = node}} />
         </div>
       </Sidebar.Pusher>
     </Sidebar.Pushable>)
 
+    //<DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
+
     return <div className="App">
         {sidebarArea}
-        <ParserBar macros={this.state.macros} callback={this.mkPT}/>
+        <ParserBar macros={this.state.macros} callback={this.mkPT} port={getPort()} />
       </div>;
   }
 }

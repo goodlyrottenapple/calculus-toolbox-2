@@ -26,9 +26,18 @@ export default () => {
           }
         },
         {
+          type: 'separator'
+        },
+        {
           label: "Add/Modify Calculus",
           click: function (item, focusedWindow) {
             focusedWindow.send('menu:edit')
+          }
+        },
+        {
+          label: "Switch Calculus",
+          click: function (item, focusedWindow) {
+            focusedWindow.send('menu:switch')
           }
         }
       ]

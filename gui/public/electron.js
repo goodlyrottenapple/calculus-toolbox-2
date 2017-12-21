@@ -13,7 +13,8 @@ const production = process.env.ELECTRON_START_URL === undefined
 
 const Store = require('electron-store');
 const store = new Store();
-let port = 8081;
+const portfinder = require('portfinder');
+let port;
 
 
 // Keep a global reference of the window object, if you don't, the window will
@@ -49,7 +50,7 @@ function createWindow() {
 
 
     // Open the DevTools.
-    // if(production) 
+    if(!production) 
       mainWindow.webContents.openDevTools();
 
     const {ipcMain} = require('electron')
@@ -81,21 +82,28 @@ function createBackendServer () {
   var workDir = store.get('workDir')
 
   const launch = () => {
-    const currentCalc = store.get('currentCalc')
-    if(currentCalc && currentCalc !== '') backendServer = child_process.spawn(cmd, ['gui', '--path', workDir, '--calc', currentCalc]);
-    else backendServer = child_process.spawn(cmd, ['gui', '--path', workDir]);
+    portfinder.getPortPromise()
+    .then((p) => {
+      port = p
+      console.log("launching on port " + port)
+      const currentCalc = store.get('currentCalc')
+      if(currentCalc && currentCalc !== '') backendServer = child_process.spawn(cmd, ['gui', '--port', port, '--path', workDir, '--calc', currentCalc]);
+      else backendServer = child_process.spawn(cmd, ['gui', '--port', port, '--path', workDir]);
 
-    backendServer.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
-    });
+      backendServer.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`);
+      });
 
-    backendServer.stderr.on('data', (data) => {
-      console.log(`stderr: ${data}`);
+      backendServer.stderr.on('data', (data) => {
+        console.log(`stderr: ${data}`);
+      });
+      createWindow();
+    })
+    .catch((err) => {
+      alert(err);
     });
-    createWindow();
   }
 
-  console.log(workDir)
   if(workDir === undefined || workDir === ''){
     var setupWindow = new BrowserWindow({ width: 800, height: 300, title:"Modify calculus" });
 
