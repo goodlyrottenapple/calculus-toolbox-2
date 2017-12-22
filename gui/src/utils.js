@@ -7,12 +7,20 @@ function urlPath(p) {
     if (window.process.platform === "win32") editUrl = window.process.env.ELECTRON_START_URL + "#" + p
     else editUrl = editUrl = join(window.process.env.ELECTRON_START_URL , "#", p)
   else
-    editUrl = format({
-      pathname: join(window.__dirname, '/../build/index.html'),
-      hash: p,
-      protocol: 'file:',
-      slashes: true
-    });
+    if (window.process.platform === "win32")
+      editUrl = format({
+        pathname: join(window.__dirname, 'index.html'),
+        hash: p,
+        protocol: 'file:',
+        slashes: true
+      });
+    else
+      editUrl = format({
+        pathname: join(window.__dirname, '/../build/index.html'),
+        hash: p,
+        protocol: 'file:',
+        slashes: true
+      });
   return editUrl;
 }
 

@@ -220,7 +220,10 @@ export default () => {
         }
       ]
     } else {
-      template[2].submenu.push(
+      template[1].submenu.push(
+        {
+          type: 'separator'
+        },
         {
           label: "Preferences",
           click: function (item, focusedWindow) {
