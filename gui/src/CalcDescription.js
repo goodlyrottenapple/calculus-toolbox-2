@@ -50,7 +50,7 @@ export default class CalcDescription extends Component {
       this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
     }
     const error = (data) => console.log(data)
-    getCalcDesc(this.props.port, 'no-cache', success, error)
+    getCalcDesc(this.props.port, success, error)
   }
 
   handleChange = (e, { name, value }) => this.setState({ [name]: value })
