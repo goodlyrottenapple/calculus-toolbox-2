@@ -26,8 +26,10 @@ let backendServer
 
 function urlPath(p) {
   var editUrl;
-  if (process.env.ELECTRON_START_URL) 
-    editUrl = path.join(process.env.ELECTRON_START_URL , "#", p)
+  if (process.env.ELECTRON_START_URL) {
+    if (process.platform === "win32") editUrl = process.env.ELECTRON_START_URL + "#" + p
+    else editUrl = path.join(process.env.ELECTRON_START_URL , "#", p)
+  }
   else
     editUrl = url.format({
       pathname: path.join(__dirname, '/../build/index.html'),
@@ -35,12 +37,13 @@ function urlPath(p) {
       protocol: 'file:',
       slashes: true
     });
+  console.log("url: " + editUrl)
   return editUrl;
 };
 
 function createWindow() {
     // Create the browser window.
-    mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600, show: false});
+    mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600});
     mainWindow.port = port
 
     // and load the index.html of the app.
@@ -78,7 +81,8 @@ function createBackendServer () {
     path.join(path.dirname(appRootDir), 'bin'):
     path.join(appRootDir, 'resources');
 
-  const cmd = path.join(execPath, 'calculus-toolbox');
+  const exe = process.platform === 'win32' ? ".exe" : ""
+  const cmd = path.join(execPath, 'calculus-toolbox' + exe);
   var workDir = store.get('workDir')
 
   const launch = () => {
