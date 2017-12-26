@@ -23,7 +23,6 @@ export default class ParserBar extends Component {
     this.parseSequent = this.parseSequent.bind(this)  
   }
 
-
   handleErrors(response) {
     if (response.ok) {
       return response.json();

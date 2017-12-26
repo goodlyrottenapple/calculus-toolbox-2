@@ -1,7 +1,6 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
 import { getCalcDesc , postModifyCalc } from './ServantApi.js'
-import { getPort } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'

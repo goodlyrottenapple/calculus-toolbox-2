@@ -1,5 +1,5 @@
 import React, {Component} from 'react'
-import { Form, Button } from 'semantic-ui-react'
+import { Form } from 'semantic-ui-react'
 
 
 export default class Preferences extends Component {

@@ -1,11 +1,13 @@
 
 import React, { Component } from 'react';
+
 import './App.css';
 import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
-import DocName from './DocName.js'
+// import DocName from './DocName.js'
+import SwitchCalc from './SwitchCalc.js'
 
-import { getMacros , getListCalculi } from './ServantApi.js'
+import { getMacros } from './ServantApi.js'
 import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
 
@@ -23,13 +25,15 @@ export default class MainView extends Component {
         latex : '',
         term: {}
       },
-      sidebarVisible: false
+      sidebarVisible: false,
+      switchCalcVisible: false
     }
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
-    this.mkPT = this.mkPT.bind(this)
+    this.mkPTstub = this.mkPTstub.bind(this)
     this.updateName = this.updateName.bind(this)
     this.openEdit = this.openEdit.bind(this)
+    this.mkPT = this.mkPT.bind(this)
   }
 
   setMenu() {
@@ -39,12 +43,6 @@ export default class MainView extends Component {
 
     const menu = Menu.buildFromTemplate(menuTemplate());
     Menu.setApplicationMenu(menu);
-
-    const ipcRenderer = window.require('electron').ipcRenderer;
-    ipcRenderer.on('menu:open', e => {
-      console.log("open")
-      console.log(this.state)
-    })
 
     const saveAs = () => {
       const {dialog} = window.require('electron').remote;
@@ -67,6 +65,31 @@ export default class MainView extends Component {
     }
 
 
+    const open = () => {
+      const {dialog} = window.require('electron').remote;
+      dialog.showOpenDialog(
+        window.require('electron').remote.getCurrentWindow(),
+        {
+          filters: [
+            { name: 'Calculus Session', extensions: ['session'] }
+          ]
+        },
+        (fileName) => {
+          if (fileName === undefined){
+              console.log("You didn't open a file");
+              return;
+          }
+          console.log(fileName)
+          this.openSession(fileName);
+        }
+      );
+    }
+
+    const ipcRenderer = window.require('electron').ipcRenderer;
+    ipcRenderer.on('menu:open', e => {
+      open()
+    })
+
     ipcRenderer.on('menu:save', e => {
       if(this.state.saveFile === undefined) saveAs();
       else this.saveSession(this.state.saveFile);
@@ -79,7 +102,8 @@ export default class MainView extends Component {
     })
 
     ipcRenderer.on('menu:switch', e => {
-      this.switchCalc();
+      // this.switchCalc();
+      this.toggle('switchCalcVisible')
     })
 
     ipcRenderer.on('menu:prefs', e => {
@@ -87,9 +111,32 @@ export default class MainView extends Component {
     })
   }
 
+
+  mkPT(pt) {
+    const r = Object.keys(pt)[0];
+    const concl = pt[r].conclusion;
+    this.setState({ptSequent:concl})
+    const cs = pt[r].premises.reverse().map((c) => this.pt.fromJSONFileInput(c))
+    this.pt.setState({rule:r, children:cs})
+  }
+
+
+  openSession(file) {
+    const fs = window.require('fs')
+    fs.readFile(file[0], (err, data) => {
+      if (err) {
+        return console.error(err);
+      }
+      const session = JSON.parse(data.toString())
+      // console.log(session);
+
+      this.mkPT(session.pt)
+    });
+  }
+
   saveSession(file) {
     const fs = window.require('fs')
-    const content = JSON.stringify( this.pt.toJSON() );
+    const content = JSON.stringify({ version:1, pt: this.pt.toJSON() });
 
     fs.writeFile(file, content, (err) => {
       if(err){
@@ -127,7 +174,7 @@ export default class MainView extends Component {
     this.setState({[x] : !this.state[x]})
   }
 
-  mkPT(s) {
+  mkPTstub(s) {
     this.setState({ptSequent: s})
     console.log(s)
   }
@@ -156,16 +203,6 @@ export default class MainView extends Component {
         // win.removeAllListeners();
       win = null
     })
-
-
-    //   // const fs = electron.remote.require('fs');
-    
-    //   const {dialog} = window.require('electron').remote
-    //   console.log(dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
-
-      // console.log(electron.dialog.showOpenDialog({properties: ['openFile', 'openDirectory', 'multiSelections']}))
-
-      
   }
 
   openPrefs() {
@@ -182,13 +219,6 @@ export default class MainView extends Component {
     win.on('close', function () {
       win = null
     })      
-  }
-
-
-  switchCalc() {
-    const success = (data) => console.log(data)
-    const failure = (data) => console.log(data)
-    getListCalculi(getPort(), success, failure)
   }
 
 
@@ -241,10 +271,8 @@ export default class MainView extends Component {
         <div style={{margin:'10px'}}>
           <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Assumptions</Header>
 
-          <Segment.Group >
-            <Segment>Nested Top</Segment>
-            <Segment>Nested Middle</Segment>
-            <Segment>Nested Bottom</Segment>
+          <Segment.Group>
+            <Segment>TODO</Segment>
           </Segment.Group>
         </div>
       </Sidebar>
@@ -258,17 +286,30 @@ export default class MainView extends Component {
                      sequent={this.state.ptSequent} 
                      saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
                      rule=""
-                     port={getPort()}
                      ref={(node) => {this.pt = node}} />
         </div>
       </Sidebar.Pusher>
     </Sidebar.Pushable>)
 
+    const switchFn = () => {
+      this.toggle('switchCalcVisible')
+      this.reloadMacros();
+      this.setState({
+        ptSequent: {
+          latex : '',
+          term: {}
+        }
+      })
+    }
+
     //<DocName style={{float:'right', margin:'10px'}} onEdit={this.updateName}/>
 
-    return <div className="App">
+    return (<div className="App">
         {sidebarArea}
-        <ParserBar macros={this.state.macros} callback={this.mkPT} port={getPort()} />
-      </div>;
+        <SwitchCalc visible={this.state.switchCalcVisible} 
+                    onClose={() => this.toggle('switchCalcVisible')}
+                    onSwitch={switchFn}/>
+        <ParserBar macros={this.state.macros} callback={this.mkPTstub} port={getPort()} />
+      </div>)
   }
 }

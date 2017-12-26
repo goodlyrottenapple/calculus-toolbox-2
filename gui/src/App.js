@@ -3,7 +3,7 @@ import React, { Component } from 'react';
 import CalcDescription from './CalcDescription.js'
 import Preferences from './Preferences.js'
 import MainView from './MainView.js'
-import { getPort } from './utils.js'
+// import { getPort } from './utils.js'
 
 import { Route, Switch } from 'react-router-dom'
 

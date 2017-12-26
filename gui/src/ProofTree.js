@@ -2,6 +2,7 @@ import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
 import { postApplicableRules, postLaunchPS, postCancelPS, postQueryPSResult } from './ServantApi.js'
+import { getPort } from './utils.js'
 
 import { Dropdown, Modal, Button, List, Icon, Loader } from 'semantic-ui-react'
 
@@ -73,7 +74,7 @@ export default class ProofTree extends Component {
       this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
-    postApplicableRules(this.props.port, this.props.sequent.term, success, error)
+    postApplicableRules(getPort(), this.props.sequent.term, success, error)
   }
 
   runPS() {
@@ -85,7 +86,8 @@ export default class ProofTree extends Component {
     }
     const error = (data) => console.log(data)
     // 15 is the proof depth parameter
-    postLaunchPS(this.props.port, [15,[],this.props.sequent.term], success, error)
+    console.log("port: " + getPort())
+    postLaunchPS(getPort(), [15,[],this.props.sequent.term], success, error)
   }
 
   pollPS() {
@@ -104,7 +106,7 @@ export default class ProofTree extends Component {
       }
     }
     const error = (data) => console.log(data)
-    postQueryPSResult(this.props.port, this.state.psId, success, error)
+    postQueryPSResult(getPort(), this.state.psId, success, error)
   }
 
   appendPT(pt) {
@@ -120,13 +122,20 @@ export default class ProofTree extends Component {
     return <ProofTree macros={this.props.macros} sequent={concl} rule={r} children={cs}/>
   }
 
+  fromJSONFileInput(pt) {
+    const r = Object.keys(pt)[0];
+    const concl = pt[r].conclusion;
+    const cs = pt[r].premises.reverse().map((c) => this.fromJSONFileInput(c))
+    return <ProofTree macros={this.props.macros} sequent={concl} rule={r} children={cs}/>
+  }
+
   cancelPS() {
     this.toggle('doingPS');
     const success = (data) => {
       console.log(data)
     }
     const error = (data) => console.log(data)
-    postCancelPS(this.props.port, this.state.psId, success, error)
+    postCancelPS(getPort(), this.state.psId, success, error)
   }
 
   toJSON() {
@@ -154,8 +163,8 @@ export default class ProofTree extends Component {
         const child = React.cloneElement(this.state.children[i], {
             ref: 'child-' + i
         });
-        if(i<this.state.children.length -1) ret.push(<td className="hasRight" valign="bottom">{child}</td>)
-        else ret.push(<td valign="bottom">{child}</td>)
+        if(i<this.state.children.length -1) ret.push(<td key={i} className="hasRight" valign="bottom">{child}</td>)
+        else ret.push(<td key={i} valign="bottom">{child}</td>)
       }
       return ret;
     }
@@ -183,9 +192,6 @@ export default class ProofTree extends Component {
           </Dropdown.Item>
           <Dropdown.Item onClick={this.runPS}>
             Proof Search
-          </Dropdown.Item>
-          <Dropdown.Item onClick={() => console.log(this.toJSON())}>
-            Save
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
