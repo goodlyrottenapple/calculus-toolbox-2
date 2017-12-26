@@ -408,15 +408,23 @@ readFile' name = do
     hGetContents h
 
 
-
+-- checs that the calculus+rule files exists and launches runEmptyGUI if the dont, 
+    -- otherwise it reads+parses the file and launcges gui with the given calc
 runGUI :: FilePath -> FilePath -> Int -> IO ()
 runGUI calcFolder calcName port = do
-    -- [calcFolder, jsFolder] <- getArgs
-    c <- readFile' $ calcFolder </> calcName System.FilePath.Posix.<.> "calc"
-    r <- readFile' $ calcFolder </> calcName System.FilePath.Posix.<.> "rules"
-    config <- mkConfig (toS calcName) c r calcFolder
-    -- writeJSCode 8081 jsFolder
-    run port $ app config
+    cFEx <- doesFileExist calcFile
+    rFEx <- doesFileExist ruleFile
+    if (cFEx && rFEx) then do
+        c <- readFile' $ calcFile
+        r <- readFile' $ ruleFile
+        config <- mkConfig (toS calcName) c r calcFolder
+        -- writeJSCode 8081 jsFolder
+        run port $ app config
+    else runEmptyGUI calcFolder port
+
+    where
+        calcFile = calcFolder </> calcName System.FilePath.Posix.<.> "calc"
+        ruleFile = calcFolder </> calcName System.FilePath.Posix.<.> "rules"
 
 runEmptyGUI :: FilePath -> Int -> IO ()
 runEmptyGUI calcFolder port = do
