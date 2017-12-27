@@ -101,3 +101,6 @@ X , Y |- A /\ B
 
 ### Parser whitespace
 Since the parser admits mixfix notation, whitespace is important. Namely, the parser will not usually be able to parse `a/\b` or `[ag1]b` correctly, as the tokenizer will treat `a/\b` as a full variable name (this is similar behaviour to Agda). Instead, one has to write `a /\ b` and `[ ag1 ] b`, for the intended parse.
+
+### Sample calculus description file
+If you want to test the functionality of the tool without having to define a display calculus from scratch, try downloading the display version of the [classical LK sequent calculus](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases/download/v0.1.0-alpha/DispLK.zip). Extract the archive and place `DispLK.calc` and `DispLK.rules` into the working directory you chose in the initial setup window.
