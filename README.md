@@ -1,20 +1,20 @@
 # calculus-toolbox-2
 This is the new, much improved version of the original [calculus-toolbox](https://github.com/goodlyrottenapple/calculus-toolbox). The new version isn't quite feature ready, but contains most of the functionality of the original UI tool, whilst greatly simplifying the compilation of new calculi. The new tool can load and modify display calculi at runtime, with no need for re-compilation.
 
-# Download and Installation 
+## Download and Installation 
 To get started, please download the [alpha version](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases) for your operating system. For Windows users, when launching the toolbox for the first time, please enable the two firewall windows that pop up.
 
-# A brief introduction
+## A brief introduction
 
 Click on the image below for a brief video introducing the core features of the Calculus toolbox UI:
 [![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/I-lot7xdkVM/0.jpg)](https://www.youtube.com/watch?v=I-lot7xdkVM)
 
 (https://www.youtube.com/watch?v=I-lot7xdkVM)
 
-# Calculus definition
+## Calculus definition
 Calculi can be specified within the tool in a DSL, separated into two definitions, first defining the types and connectives of the calculus and then defining the rules.
 
-## Definitions
+### Definitions
 A minimal calculus needs to specify at least one type, usually the type of atomic propositions. This is just an abstract type and for single type calculi, it is enough to write
 
 `type atprop`
@@ -54,7 +54,7 @@ box : formula{agent} -> formula{atprop} -> formula ("[_]_" , NonAssoc, 4, "\box_
 
 Notice that we declared `atprop` to be the default type (if there is more than one type in the definition, one has to be declared with the keyword `default`) and can thus omit `{atprop}` in `...-> formula ("[_...`, which is equivalent to `...-> formula{atprop} ("[_...`.
 
-## Rules
+### Rules
 The rules can be defined in the style of natural deduction, with the premises and conclusion separated with one or more dashes, followed by the name of the rule. For example, we can define the atom rule as:
 
 ```
@@ -96,3 +96,8 @@ X |- A    Y |- B
 ---------------- andR
 X , Y |- A /\ B
 ```
+
+## Notes
+
+### Parser whitespace
+Since the parser admits mixfix notation, whitespace is important. Namely, the parser will not usually be able to parse `a/\b` or `[ag1]b` correctly, as the tokenizer will treat `a/\b` as a full variable name (this is similar behaviour to Agda). Instead, one has to write `a /\ b` and `[ ag1 ] b`, for the intended parse.
