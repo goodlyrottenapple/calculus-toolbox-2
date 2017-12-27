@@ -104,3 +104,8 @@ Since the parser admits mixfix notation, whitespace is important. Namely, the pa
 
 ### Sample calculus description file
 If you want to test the functionality of the tool without having to define a display calculus from scratch, try downloading the display version of the [classical LK sequent calculus](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases/download/v0.1.0-alpha/DispLK.zip). Extract the archive and place `DispLK.calc` and `DispLK.rules` into the working directory you chose in the initial setup window.
+
+### Windows Firewall
+When opening the toolbox for the first time on Windows, you will see two firewall dialogs like this:
+![windows firewall](https://user-images.githubusercontent.com/10553895/34380814-7a5a8748-eb04-11e7-9589-667268a3a349.PNG)
+Please allow access for both. These pop up, because the core toolbox tool is running an http server, which talks to the GUI frontend.
