@@ -107,5 +107,7 @@ If you want to test the functionality of the tool without having to define a dis
 
 ### Windows Firewall
 When opening the toolbox for the first time on Windows, you will see two firewall dialogs like this:
+
 ![windows firewall](https://user-images.githubusercontent.com/10553895/34380814-7a5a8748-eb04-11e7-9589-667268a3a349.PNG)
-Please allow access for both. These pop up, because the core toolbox tool is running an http server, which talks to the GUI frontend.
+
+Please allow access to both. These pop up, because the core toolbox tool is running an http server, which talks to the GUI frontend.
