@@ -1,5 +1,6 @@
 import React, {Component} from 'react'
 import './ParserBar.css'
+import { getPort } from './utils.js'
 import { getParseDSeq } from './ServantApi.js'
 
 import KaTeXRenderer from './KaTeXRenderer.js'
@@ -15,7 +16,7 @@ export default class ParserBar extends Component {
     super(props)
     this.state = {  
       sequent : {
-        latex : '',
+        latex : ' ',
         term : {}
       },
       parseError : ''
@@ -35,15 +36,15 @@ export default class ParserBar extends Component {
   parseSequent(e) {
     const didPressEnter = (e.key === 'Enter') ? true : false
     const success = (data) => {
-      this.setState({ sequent: data })
-      this.setState({ parseError: "" })
+      // console.log(data)
+      this.setState({ sequent: data , parseError: "" })
       if (didPressEnter) this.props.callback(data);
     }
     const error = (data) => {
       console.log(data)
-      this.setState({ parseError: "error" })
+      this.setState({ sequent: {latex: ' ', term : {}}, parseError: "error" })
     }
-    getParseDSeq(this.props.port, e.target.value, success, error)
+    getParseDSeq(getPort(), e.target.value, success, error)
   }
 
   render() {

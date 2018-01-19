@@ -6,10 +6,13 @@ import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
 // import DocName from './DocName.js'
 import SwitchCalc from './SwitchCalc.js'
+import AddAssm from './AddAssm.js'
 
 import { getMacros } from './ServantApi.js'
 import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
+import KaTeXRenderer from './KaTeXRenderer.js'
+
 
 import { Segment, Header, Menu, Sidebar, Button } from 'semantic-ui-react'
 
@@ -20,13 +23,15 @@ export default class MainView extends Component {
 
     this.state = {
       macros: {},
+      assms: [],
       name: '',
       ptSequent: {
         latex : '',
         term: {}
       },
       sidebarVisible: false,
-      switchCalcVisible: false
+      switchCalcVisible: false,
+      addAssmVisible: false
     }
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
@@ -256,6 +261,26 @@ export default class MainView extends Component {
     //   </Dropdown>
     // )
 
+    const addAssm = (data) => {
+      var array = this.state.assms;
+      array.push(data);
+      this.setState({ assms: array });
+    }
+
+    const removeAssm = (index) => {
+      var array = this.state.assms;
+      array.splice(index, 1);
+      this.setState({ assms: array });
+    }
+
+    const assms = this.state.assms.map((a, index) => 
+      <Segment key={a.latex+index}>
+        <KaTeXRenderer math={a.latex} macros={this.state.macros}/>
+        <Button basic icon="close" 
+          style={{boxShadow:'none', fontSize: '0.8em', float:'right', marginTop: '-24px'}}
+          onClick={() => removeAssm(index)}/>
+      </Segment>)
+
     const sidebarArea = (<Sidebar.Pushable as={Segment} style={{marginBottom: '0px', border:'0px'}}>
       <Sidebar
         as={Menu}
@@ -272,8 +297,14 @@ export default class MainView extends Component {
           <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Assumptions</Header>
 
           <Segment.Group>
-            <Segment>TODO</Segment>
+            {assms}
           </Segment.Group>
+          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}>Add Assumption</Button>
+
+          <AddAssm visible={this.state.addAssmVisible}
+                   macros={this.state.macros} 
+                   onClose={() => this.toggle('addAssmVisible')}
+                   onAdd={(data) => {addAssm(data); this.toggle('addAssmVisible')}}/>
         </div>
       </Sidebar>
       <Sidebar.Pusher style={{minHeight: '100vh'}}>
@@ -282,8 +313,9 @@ export default class MainView extends Component {
           
         </div>
         <div id="ProofTree">
-          <ProofTree macros={this.state.macros} 
-                     sequent={this.state.ptSequent} 
+          <ProofTree macros={this.state.macros}
+                     assms={this.state.assms}
+                     sequent={this.state.ptSequent}
                      saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
                      rule=""
                      ref={(node) => {this.pt = node}} />
@@ -309,7 +341,7 @@ export default class MainView extends Component {
         <SwitchCalc visible={this.state.switchCalcVisible} 
                     onClose={() => this.toggle('switchCalcVisible')}
                     onSwitch={switchFn}/>
-        <ParserBar macros={this.state.macros} callback={this.mkPTstub} port={getPort()} />
+        <ParserBar macros={this.state.macros} callback={this.mkPTstub}/>
       </div>)
   }
 }

@@ -69,6 +69,10 @@ export default class CalcDescription extends Component {
       const electron = window.require('electron');
       const {ipcRenderer} = electron;
 
+      const Store = window.require('electron-store');
+      const store = new Store();
+      store.set('currentCalc', this.state.name)
+
       ipcRenderer.send('updateMacros');
       alert("The calculus description has been succesfully saved");
     }

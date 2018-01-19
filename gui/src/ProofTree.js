@@ -14,6 +14,7 @@ export default class ProofTree extends Component {
     },
     rule: '',
     macros: {},
+    assms : [],
     children : []
   }
 
@@ -23,7 +24,6 @@ export default class ProofTree extends Component {
       //loaded: false,
       sequent: props.sequent,
       rule: props.rule,
-      // macros: props.macros,
       addingRules: false,
       psId: 0,
       doingPS: false,
@@ -87,7 +87,8 @@ export default class ProofTree extends Component {
     const error = (data) => console.log(data)
     // 15 is the proof depth parameter
     console.log("port: " + getPort())
-    postLaunchPS(getPort(), [15,[],this.props.sequent.term], success, error)
+    console.log("assms: " + this.props.assms)
+    postLaunchPS(getPort(), [15,this.props.assms.map((a) => a.term),this.props.sequent.term], success, error)
   }
 
   pollPS() {
