@@ -120,14 +120,16 @@ export default class ProofTree extends Component {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.map((c) => this.fromJSON(c))
-    return <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={concl} rule={r} children={cs}/>
+    return <ProofTree macros={this.props.macros} assms={this.props.assms} 
+                      sequent={concl} rule={r} children={cs}/>
   }
 
   fromJSONFileInput(pt) {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.reverse().map((c) => this.fromJSONFileInput(c))
-    return <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={concl} rule={r} children={cs}/>
+    return <ProofTree macros={this.props.macros} assms={this.props.assms} 
+                      sequent={concl} rule={r} children={cs}/>
   }
 
   cancelPS() {
