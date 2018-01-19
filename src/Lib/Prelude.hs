@@ -21,7 +21,7 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 {-# LANGUAGE ViewPatterns          #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 
 module Lib.Prelude

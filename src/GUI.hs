@@ -43,7 +43,8 @@ import Control.Monad.Except
 import Control.Monad.Reader
 -- import Text.Earley
 import System.IO (hSetNewlineMode, universalNewlineMode)
-import System.FilePath.Posix((</>), (<.>), dropExtension, takeExtension)
+import System.FilePath.Posix((</>), dropExtension, takeExtension)
+import qualified System.FilePath.Posix as FP
 import Data.Text.IO (hGetContents)
 import System.Directory(listDirectory, removeFile, doesFileExist)
 
@@ -233,10 +234,10 @@ getApplicableRulesH dseq = freeze $ do
     return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
 
 
-type CalculusDescriptionAPI = "calcDesc" :> Get '[JSON] CalcDesc
-                         :<|> "modifyCalc" :> ReqBody '[JSON] CalcDesc :> Post '[JSON] ()
-                         :<|> "deleteCalc" :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
-                         :<|> "loadCalc" :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
+type CalculusDescriptionAPI = "calcDesc"    :> Get '[JSON] CalcDesc
+                         :<|> "modifyCalc"  :> ReqBody '[JSON] CalcDesc :> Post '[JSON] ()
+                         :<|> "deleteCalc"  :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
+                         :<|> "loadCalc"    :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
                          :<|> "listCalculi" :> Get '[JSON] [FilePath]
 
 
@@ -248,7 +249,7 @@ caclDescH = do
 
 modifyCalcH :: CalcDesc -> AppM [Rule Text] ()
 modifyCalcH CalcDesc{..} = do
-    if name == "" then throw $ InvalidName name else return ()
+    when (name == "") $ throw $ InvalidName name
     cd <- parseFinTypeCalculusDescription rawCalc
     rules <- runReaderT (parseRules rawRules) cd
     -- print rules
@@ -257,35 +258,37 @@ modifyCalcH CalcDesc{..} = do
     cFolder <- asks calcFolder
     print cFolder
 
-    liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".calc") rawCalc
-    liftIO $ writeFile (cFolder ++ "/" ++ toS name ++ ".rules") rawRules
+    liftIO $ writeFile (cFolder </> toS name FP.<.> ".calc") rawCalc
+    liftIO $ writeFile (cFolder </> toS name FP.<.> ".rules") rawRules
 
 
 deleteCalcH :: FilePath -> AppM r ()
 deleteCalcH f = do
     workDir <- asks calcFolder
-    deleteFile $ workDir </> f System.FilePath.Posix.<.> "calc"
-    deleteFile $ workDir </> f System.FilePath.Posix.<.> "rules"
+    deleteFile $ workDir </> f FP.<.> "calc"
+    deleteFile $ workDir </> f FP.<.> "rules"
 
     where
         deleteFile file = do
             exists <- liftIO $ doesFileExist $ file
-            if exists then liftIO $ removeFile file else throw $ FileDoesNotExist file
+            unless exists $ throw $ FileDoesNotExist file
+            liftIO $ removeFile file
 
 loadCalcH :: FilePath -> AppM [Rule Text] ()
 loadCalcH f = do
-    workDir <- asks calcFolder
-    rawCalc <- readF $ workDir </> f System.FilePath.Posix.<.> "calc"
-    rawRules <- readF $ workDir </> f System.FilePath.Posix.<.> "rules"
-    cd <- parseFinTypeCalculusDescription rawCalc
-    rules <- runReaderT (parseRules rawRules) cd
+    workDir  <- asks calcFolder
+    rawCalc  <- readF $ workDir </> f FP.<.> "calc"
+    rawRules <- readF $ workDir </> f FP.<.> "rules"
+    cd       <- parseFinTypeCalculusDescription rawCalc
+    rules    <- runReaderT (parseRules rawRules) cd
     -- print rules
     put (toS f , CalDescStore cd{rules = rules} rawCalc rawRules)
 
     where
         readF file = do
             exists <- liftIO $ doesFileExist $ file
-            if exists then liftIO $ readFile' file else throw $ FileDoesNotExist file
+            unless exists $ throw $ FileDoesNotExist file
+            liftIO $ readFile' file
 
 
 listCalculiH :: AppM r [FilePath]
@@ -305,13 +308,13 @@ serverCalcDesc :: ServerT CalculusDescriptionAPI (AppM [Rule Text])
 serverCalcDesc = caclDescH :<|> modifyCalcH :<|> deleteCalcH :<|> loadCalcH :<|> listCalculiH
 
 
-type ProofSearchAPI = "launchPS" :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
-                 :<|> "cancelPS" :> ReqBody '[JSON] Int :> Post '[JSON] ()
+type ProofSearchAPI = "launchPS"      :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
+                 :<|> "cancelPS"      :> ReqBody '[JSON] Int :> Post '[JSON] ()
                  :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] [LatexPTDSeq]
 
 
 launchPSH :: (Int, Set (DSequent 'ConcreteK Text), DSequent 'ConcreteK Text) -> AppM [Rule Text] Int
-launchPSH (maxDepth, prems, dseq) = runPS maxDepth prems dseq
+launchPSH (maxDepth, assms, dseq) = runPS maxDepth assms dseq
 
 cancelPSH :: Int -> AppM [Rule Text] ()
 cancelPSH = cancelPS
@@ -385,7 +388,7 @@ mkConfigEmpty calcFolder = do
     return Config{..}
 
 
-writeJSCode :: [Char] -> IO ()
+writeJSCode :: FilePath -> IO ()
 writeJSCode jsPath = writeJSForAPI api (customJSWith myOptions) $ jsPath
     where
         -- adds a Cache-Control header to the generator options, which results in
@@ -408,8 +411,8 @@ readFile' name = do
     hGetContents h
 
 
--- checs that the calculus+rule files exists and launches runEmptyGUI if the dont, 
-    -- otherwise it reads+parses the file and launcges gui with the given calc
+-- checks that the calculus+rule files exist and launches runEmptyGUI if the don't, 
+    -- otherwise it reads+parses the file and launches gui with the given calc
 runGUI :: FilePath -> FilePath -> Int -> IO ()
 runGUI calcFolder calcName port = do
     cFEx <- doesFileExist calcFile
@@ -423,8 +426,8 @@ runGUI calcFolder calcName port = do
     else runEmptyGUI calcFolder port
 
     where
-        calcFile = calcFolder </> calcName System.FilePath.Posix.<.> "calc"
-        ruleFile = calcFolder </> calcName System.FilePath.Posix.<.> "rules"
+        calcFile = calcFolder </> calcName FP.<.> "calc"
+        ruleFile = calcFolder </> calcName FP.<.> "rules"
 
 runEmptyGUI :: FilePath -> Int -> IO ()
 runEmptyGUI calcFolder port = do
