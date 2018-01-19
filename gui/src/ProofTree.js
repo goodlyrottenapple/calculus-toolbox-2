@@ -58,7 +58,7 @@ export default class ProofTree extends Component {
   addAbove(r) {
     // console.log(r)
     const cs = r.sequents.map((r) => 
-      <ProofTree macros={this.props.macros} sequent={r} rule=""/>
+      <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={r} rule=""/>
     )
     this.setState({rule:r.rule, children:cs})
     this.toggle('addingRules')
@@ -120,14 +120,14 @@ export default class ProofTree extends Component {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.map((c) => this.fromJSON(c))
-    return <ProofTree macros={this.props.macros} sequent={concl} rule={r} children={cs}/>
+    return <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={concl} rule={r} children={cs}/>
   }
 
   fromJSONFileInput(pt) {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.reverse().map((c) => this.fromJSONFileInput(c))
-    return <ProofTree macros={this.props.macros} sequent={concl} rule={r} children={cs}/>
+    return <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={concl} rule={r} children={cs}/>
   }
 
   cancelPS() {
