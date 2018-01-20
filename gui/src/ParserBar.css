@@ -2,7 +2,10 @@
   position: fixed;
   bottom: 0;
   width: 100%;
-  padding :15px;
+  padding-top :15px;
+    padding-left :15px;
+  padding-right :15px;
+
   /*display: flex;*/
 }
 
@@ -28,6 +31,27 @@
   padding-bottom: 5px;
   width: 100%;
   overflow-y: auto;
+}
+
+#parseError{
+  position: fixed;
+  right:15px;
+  padding-left: 15px;
+  bottom: 60px;
+  color: #db2828;
+  font-family: 'Fira Code';
+  -webkit-font-feature-settings: "liga" on, "calt" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+
+.CaretPos{
+  font-family: 'Fira Code';
+  -webkit-font-feature-settings: "liga" on, "calt" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-size: 12px;
 }
 
 /*

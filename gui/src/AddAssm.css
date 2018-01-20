@@ -30,6 +30,17 @@
   overflow-y: auto;
 }
 
+#assmParseError{
+  /*position: fixed;*/
+  /*right:15px;*/
+  /*bottom: 60px;*/
+  color: #db2828;
+  font-family: 'Fira Code';
+  -webkit-font-feature-settings: "liga" on, "calt" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
 /*
 
 @font-face {

@@ -14,7 +14,7 @@ import menuTemplate from './menu-template.js'
 import KaTeXRenderer from './KaTeXRenderer.js'
 
 
-import { Segment, Header, Menu, Sidebar, Button } from 'semantic-ui-react'
+import { Segment, Header, Menu, Sidebar, Button, Icon } from 'semantic-ui-react'
 
 export default class MainView extends Component {
   constructor() {
@@ -296,10 +296,10 @@ export default class MainView extends Component {
         <div style={{margin:'10px'}}>
           <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Assumptions</Header>
 
-          <Segment.Group>
+          {this.state.assms.length > 0 && <Segment.Group>
             {assms}
-          </Segment.Group>
-          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}>Add Assumption</Button>
+          </Segment.Group>}
+          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}><Icon name='add' /> Add Assumption</Button>
 
           <AddAssm visible={this.state.addAssmVisible}
                    macros={this.state.macros} 

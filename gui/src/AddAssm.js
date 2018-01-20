@@ -1,10 +1,10 @@
 import React, {Component} from 'react'
 import './AddAssm.css'
 
-import { getPort } from './utils.js'
+import { getPort, prettyErrorMsg } from './utils.js'
 import { getParseDSeq } from './ServantApi.js'
 
-import { Modal, Button, Input } from 'semantic-ui-react'
+import { Modal, Button, Input, Transition } from 'semantic-ui-react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 
 export default class AddAssm extends Component {
@@ -16,7 +16,8 @@ export default class AddAssm extends Component {
         latex : ' ',
         term : {}
       },
-      addEnabled: false
+      addEnabled: false,
+      parseErrorData : {tag: "DefaultError"}
     }
     this.parseSequent = this.parseSequent.bind(this)  
   }
@@ -42,7 +43,7 @@ export default class AddAssm extends Component {
     }
     const error = (data) => {
       console.log(data)
-      this.setState({ sequent: {latex: ' ', term : {}}, addEnabled: false, parseError: 'error' })
+      this.setState({ addEnabled: false, parseError: 'error', parseErrorData: data })
     }
     getParseDSeq(getPort(), e.target.value, success, error)
   }
@@ -54,7 +55,10 @@ export default class AddAssm extends Component {
         <Modal.Content>
           <Modal.Description>
             <div id="AddAssmInput">
-              <KaTeXRenderer id="AssmRendered" math={this.state.sequent.latex} macros={this.props.macros}/>
+              <Transition.Group animation='fade up' duration={200}>
+                {this.state.parseError === '' && <KaTeXRenderer id="AssmRendered" math={this.state.sequent.latex} macros={this.props.macros}/>}
+                {this.state.parseError === 'error' && <div id="assmParseError">{prettyErrorMsg(this.state.parseErrorData)}</div>}
+              </Transition.Group>
               <Input className={this.state.parseError} onKeyUp={this.parseSequent}/>
             </div>
           </Modal.Description>

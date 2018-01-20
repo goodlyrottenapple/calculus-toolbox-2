@@ -124,6 +124,31 @@ tokenize (x:xs)
     special = HS.fromList "(){}, \n"
 
 
+
+detokenize :: P.String -> Int -> Int -> (Int,Int)
+detokenize ""        pos nthToken = (pos,pos)
+detokenize (' ':xs)  pos nthToken = detokenize xs (pos+1) nthToken
+detokenize ('\n':xs) pos nthToken = detokenize xs (pos+1) nthToken
+detokenize ('"':xs)  pos nthToken = case nthToken of
+    0 -> (pos,fPos)
+    _ -> detokenize bs (fPos+1) (nthToken-1)
+  where
+    (fPos, bs) = brackets xs
+    brackets ys = case break (=='"') ys of
+        (us,('"':vs)) -> (pos + length us + 1,vs)
+        (us,vs)       -> (pos + length us,vs)
+detokenize (x:xs) pos nthToken
+  | x `HS.member` special = case nthToken of
+    0 -> (pos,pos+1)
+    _ -> detokenize xs (pos+1) (nthToken-1)
+  | otherwise             = case nthToken of
+    0 -> (pos,fPos)
+    _ -> detokenize bs (fPos+1) (nthToken-1)
+  where
+    (as, bs) = break (`HS.member` special) xs
+    fPos = pos + length as
+    special = HS.fromList "(){}, \n"
+
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | AmbiguousCalcDescParse (Report P.String [P.String])
                             | MultipleDefaultTypes
@@ -131,8 +156,16 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | NoDefaultTypeDeclared
                             | SameNameConn Text
                             | SameParserSyntax Text Text
-                            | IncorrectNoOfArgs Text Int Int -- the number of holes differs from the number of args expected
-                            | TypesNotDeclared (Set CalcType) deriving (Show, Generic, ToJSON, Typeable)
+                            | IncorrectNoOfArgs {
+                                connective :: Text,
+                                expected :: Int,
+                                noOfHoles :: Int
+                              } -- the number of holes differs from the number of args expected
+                            | TypesNotDeclared {
+                                connective :: Text,
+                                missingTypes :: Set CalcType
+                              }
+                                deriving (Show, Generic, ToJSON, Typeable)
 
 deriving instance Exception CalculusDescParseError
 
@@ -194,7 +227,7 @@ mkFinTypeCalculusDescription ps = do
         mkConnDescription defaultType types n ts t prs a b latex =
             if (S.fromList $ outType:inTypes) `S.isSubsetOf` types then
                 return $ ConnDescription{..}
-            else throw $ TypesNotDeclared $ types S.\\ (S.fromList $ outType:inTypes)
+            else throw $ TypesNotDeclared name $ (S.fromList $ outType:inTypes) S.\\ types 
             where
                 name = n
                 inTypes = map (fromMaybe defaultType) ts
@@ -325,7 +358,10 @@ instance TermGrammar 'StructureL 'ConcreteK where
 
 
 
-data TermParseError = TermParserError (Report P.String [P.String])
+data TermParseError = TermParserError {
+                        report :: Report P.String [P.String],
+                        position :: (Int,Int)
+                      }
                     | AmbiguousTermParse (Report P.String [P.String])
                     | AmbiguousRuleParse [Rule Text]
                     | TermUntypeable (TypeableError Text)
@@ -352,11 +388,15 @@ parseCDSeq :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) 
 parseCDSeq inStr = do
     e <- ask
     case fullParses (parser $ runReaderT grammarDSeq e) $ tokenize $ toS inStr of
-        ([p] , _) -> do
-            _ <- typeableCDSeq' M.empty p
-            return p
-        ([] , r) -> throw $ TermParserError r
-        (_ , r) -> throw $ AmbiguousTermParse r
+        ([p] , _) -> tryTypeable p
+        ([] , r@Report{..}) -> throw $ TermParserError r (detokenize (toS inStr) 0 (position-1))
+        ((p:_) , _) -> tryTypeable p
+
+    where
+        tryTypeable parsed = do
+            _ <- typeableCDSeq' M.empty parsed
+            return parsed
+
 
 
 
@@ -394,7 +434,7 @@ parseRules str = parse $ (splitRules . toS) str
         parse (r:rs) = do
             cd <- ask
             r' <- case fullParses (parser $ runReaderT grammarRule cd) $ tokenize $ r of
-                ([] , rep) -> throw $ TermParserError rep
+                ([] , rep@Report{..}) -> throw $ TermParserError rep (detokenize (toS r) 0 (position-1))
                 (prules@(r'':_) , _) -> do
                     prulesMetaMap <- (mapM typeableRule prules)
                     fixed <- zipWithM (\m r''' -> fixRule m r''') prulesMetaMap prules

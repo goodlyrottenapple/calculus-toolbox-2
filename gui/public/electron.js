@@ -40,10 +40,10 @@ function urlPath(p) {
   return editUrl;
 };
 
-function createWindow() {
+function createWindow(portNo) {
     // Create the browser window.
     mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600, show: false});
-    mainWindow.port = port
+    mainWindow.port = portNo
 
     // and load the index.html of the app.
 
@@ -76,6 +76,9 @@ function createWindow() {
 }
 
 function createBackendServer () {
+  // if running a dubug server in ghci, launch without spawning a process
+  if(process.env.DEBUG_PORT) return createWindow(process.env.DEBUG_PORT);
+
   const execPath = production ?
     path.join(path.dirname(appRootDir), 'bin'):
     path.join(appRootDir, 'resources');
@@ -88,7 +91,8 @@ function createBackendServer () {
     portfinder.getPortPromise()
     .then((p) => {
       port = p
-      console.log("launching on port " + port)
+      console.log("launching on port: " + port)
+      console.log("launching in workDir: " + workDir)
       const currentCalc = store.get('currentCalc')
       if(currentCalc && currentCalc !== '') backendServer = child_process.spawn(cmd, ['gui', '--port', port, '--path', workDir, '--calc', currentCalc]);
       else backendServer = child_process.spawn(cmd, ['gui', '--port', port, '--path', workDir]);
@@ -100,7 +104,7 @@ function createBackendServer () {
       backendServer.stderr.on('data', (data) => {
         console.log(`stderr: ${data}`);
       });
-      createWindow();
+      createWindow(port);
     })
     .catch((err) => {
       alert(err);
@@ -123,6 +127,7 @@ function createBackendServer () {
 }
 
 // Start the backend web server when Electron has finished initializing.
+// This method will be called when Electron has finished
 app.on('ready', createBackendServer)
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -146,7 +151,7 @@ app.on('activate', function () {
     // On OS X it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (mainWindow === null) {
-        createWindow(8081)
+        createWindow(port)
     }
 });
 

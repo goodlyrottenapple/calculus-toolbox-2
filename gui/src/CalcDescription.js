@@ -1,6 +1,7 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
 import { getCalcDesc , postModifyCalc } from './ServantApi.js'
+import { prettyErrorMsg } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
@@ -76,7 +77,7 @@ export default class CalcDescription extends Component {
       ipcRenderer.send('updateMacros');
       alert("The calculus description has been succesfully saved");
     }
-    const error = (data) => alert(JSON.stringify(data));
+    const error = (data) => alert(prettyErrorMsg(data));
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
 
     postModifyCalc(this.props.port, body, success, error)
