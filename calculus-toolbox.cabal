@@ -68,7 +68,7 @@ executable calculus-toolbox
                      , protolude >= 0.1.6 && < 0.3
                      , optparse-generic
   default-language:    Haskell2010
-  default-extensions:  OverloadedStrings, NoImplicitPrelude
+  default-extensions:  OverloadedStrings, NoImplicitPrelude, DeriveGeneric
 
 test-suite calculus-toolbox-test
   type:                exitcode-stdio-1.0
