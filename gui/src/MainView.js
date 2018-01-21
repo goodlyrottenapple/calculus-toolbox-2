@@ -37,7 +37,7 @@ export default class MainView extends Component {
     this.reloadMacros = this.reloadMacros.bind(this)  
     this.mkPTstub = this.mkPTstub.bind(this)
     this.updateName = this.updateName.bind(this)
-    this.openEdit = this.openEdit.bind(this)
+    // this.openEdit = this.openEdit.bind(this)
     this.mkPT = this.mkPT.bind(this)
   }
 
@@ -102,9 +102,10 @@ export default class MainView extends Component {
 
     ipcRenderer.on('menu:saveAs', e => saveAs())
 
-    ipcRenderer.on('menu:edit', e => {
-      this.openEdit();
-    })
+    // ipcRenderer.on('menu:edit', e => {
+    //   this.openEdit();
+    //   ipcRenderer.send('menu:edit2');
+    // })
 
     ipcRenderer.on('menu:switch', e => {
       // this.switchCalc();
@@ -188,27 +189,27 @@ export default class MainView extends Component {
     this.setState({name:n})
   }
 
-  openEdit() {
-    const electron = window.require('electron');
+  // openEdit() {
+  //   const electron = window.require('electron');
   
-    const remote = electron.remote;
+  //   const remote = electron.remote;
 
-    const BrowserWindow = remote.BrowserWindow;
-    var win = new BrowserWindow({ width: 800, height: 700, title:"Modify calculus" });
+  //   const BrowserWindow = remote.BrowserWindow;
+  //   var win = new BrowserWindow({ width: 800, height: 700, title:"Modify calculus" });
 
 
-    win.loadURL(urlPath('/edit/'+getPort()));
-    win.setMenu(null);
+  //   win.loadURL(urlPath('/edit/'+getPort()));
+  //   win.setMenu(null);
 
-    // const current = remote.getCurrentWindow();
-    win.on('close', function () {
-        // Dereference the window object, usually you would store windows
-        // in an array if your app supports multi windows, this is the time
-        // when you should delete the corresponding element.
-        // win.removeAllListeners();
-      win = null
-    })
-  }
+  //   // const current = remote.getCurrentWindow();
+  //   win.on('close', function () {
+  //       // Dereference the window object, usually you would store windows
+  //       // in an array if your app supports multi windows, this is the time
+  //       // when you should delete the corresponding element.
+  //       // win.removeAllListeners();
+  //     win = null
+  //   })
+  // }
 
   openPrefs() {
     const electron = window.require('electron');

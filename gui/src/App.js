@@ -14,7 +14,7 @@ export default class App extends Component {
 
     return (
       <Switch>
-        <Route path={`/edit/:port`} component={CalcDesc}/>
+        <Route path={`/edit`} component={CalcDescription}/>
         <Route path={`/preferences/:opts`} component={Settings}/>
         <Route path={`/`} component={MainView}/>
       </Switch>

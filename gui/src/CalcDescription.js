@@ -1,7 +1,7 @@
 import React, {Component} from 'react'
 import './CalcDescription.css'
 import { getCalcDesc , postModifyCalc } from './ServantApi.js'
-import { prettyErrorMsg } from './utils.js'
+import { getPort, prettyErrorMsg } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
@@ -50,7 +50,7 @@ export default class CalcDescription extends Component {
       this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
     }
     const error = (data) => console.log(data)
-    getCalcDesc(this.props.port, success, error)
+    getCalcDesc(getPort(), success, error)
   }
 
   handleChange = (e, { name, value }) => this.setState({ [name]: value })
@@ -80,7 +80,7 @@ export default class CalcDescription extends Component {
     const error = (data) => alert(prettyErrorMsg(data));
     const body = { name: this.state.name, rawCalc: this.state.calc, rawRules: this.state.rules }
 
-    postModifyCalc(this.props.port, body, success, error)
+    postModifyCalc(getPort(), body, success, error)
   }
   render() {
     const options = {

@@ -6,11 +6,7 @@ This is a haddock comment describing your library
 For more information on how to write Haddock comments check the user guide:
 <https://www.haskell.org/haddock/doc/html/index.html>
 -}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE ExplicitForAll        #-}
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards       #-}
@@ -25,6 +21,7 @@ module Terms.Parsers where
 import           Lib.Prelude
 import qualified Prelude            as P
 import           Terms
+import           Rules.CutElimConditions
 -- import Data.Singletons.TH
 -- import GHC.TypeLits(SomeNat(..))
 import           Data.Singletons
@@ -126,7 +123,7 @@ tokenize (x:xs)
 
 
 detokenize :: P.String -> Int -> Int -> (Int,Int)
-detokenize ""        pos nthToken = (pos,pos)
+detokenize ""        pos _        = (pos,pos)
 detokenize (' ':xs)  pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('\n':xs) pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('"':xs)  pos nthToken = case nthToken of
@@ -365,7 +362,8 @@ data TermParseError = TermParserError {
                     | AmbiguousTermParse (Report P.String [P.String])
                     | AmbiguousRuleParse [Rule Text]
                     | TermUntypeable (TypeableError Text)
-                    | RuleUntypeable Text deriving (Show, Generic, ToJSON)
+                    | RuleUntypeable Text 
+                    | CutElimConditionViolated Int (Rule Text) deriving (Show, Generic, ToJSON)
 
 instance Exception TermParseError
 
@@ -422,6 +420,7 @@ splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
         emptyString x = x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n")
 
 
+
 -- this version does not throw an error on ambiguous parse,
 -- but choses the most general version of the rule
 parseRules :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
@@ -442,5 +441,11 @@ parseRules str = parse $ (splitRules . toS) str
                         []  -> throw $ RuleUntypeable $ ruleName r''
                         [p] -> return p
                         ps' -> throw $ AmbiguousRuleParse ps'
+
+            checkCondition 1 conditionC1 r'
             rs' <- parse rs
             return $ r':rs'
+
+        checkCondition n cFun r = 
+            if (not $ cFun r) then throw $ CutElimConditionViolated n r else return ()
+

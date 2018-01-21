@@ -1,8 +1,4 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveFunctor         #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -433,4 +429,18 @@ runEmptyGUI :: FilePath -> Int -> IO ()
 runEmptyGUI calcFolder port = do
     config <- mkConfigEmpty calcFolder
     run port $ app config
+
+
+data DebugConfig = DebugConfig {
+    workDir :: [FilePath],
+    currentCalc :: [Char]
+} deriving (Generic, FromJSON)
+
+debugMac :: IO ()
+debugMac = do
+    f <- readFile "/Users/goodlyrottenapple/Library/Application Support/CalculusToolbox/config.json"
+    let Just (DebugConfig [wd] cc) = decode (toS f)
+    putStrLn $ "Launching from: " ++ wd
+    putStrLn $ "Current calculus is: " ++ cc
+    GUI.runGUI wd cc 8081
 

@@ -17,9 +17,12 @@ export default class AddAssm extends Component {
         term : {}
       },
       addEnabled: false,
-      parseErrorData : {tag: "DefaultError"}
+      parseErrorData : {tag: "DefaultError"},
+      caretStart: 0,
+      caretEnd: 0
     }
     this.parseSequent = this.parseSequent.bind(this)  
+    this.caretPos = this.caretPos.bind(this)
   }
 
   handleErrors(response) {
@@ -31,7 +34,13 @@ export default class AddAssm extends Component {
     throw error;
   }
 
+  caretPos(e) {
+    this.setState({caretStart: e.target.selectionStart, caretEnd: e.target.selectionEnd})
+  }
+
   parseSequent(e) {
+    this.setState({caretStart: e.target.selectionStart, caretEnd: e.target.selectionEnd})
+
     const didPressEnter = (e.key === 'Enter') ? true : false
     const success = (data) => {
       // console.log(data)
@@ -45,7 +54,11 @@ export default class AddAssm extends Component {
       console.log(data)
       this.setState({ addEnabled: false, parseError: 'error', parseErrorData: data })
     }
-    getParseDSeq(getPort(), e.target.value, success, error)
+
+    if(e.target.value)
+      getParseDSeq(getPort(), e.target.value, success, error)
+    else
+      this.setState({ sequent: {latex: ' ', term : {}}, addEnabled: false, parseError: '' })
   }
   render() {
     const isDisabled = this.state.addEnabled ? '' : 'disabled'
@@ -59,7 +72,8 @@ export default class AddAssm extends Component {
                 {this.state.parseError === '' && <KaTeXRenderer id="AssmRendered" math={this.state.sequent.latex} macros={this.props.macros}/>}
                 {this.state.parseError === 'error' && <div id="assmParseError">{prettyErrorMsg(this.state.parseErrorData)}</div>}
               </Transition.Group>
-              <Input className={this.state.parseError} onKeyUp={this.parseSequent}/>
+              <Input className={this.state.parseError} onKeyUp={this.parseSequent} onClick={this.caretPos} onSelect={this.caretPos}/>
+              <div className='CaretPos'>({this.state.caretStart},{this.state.caretEnd})</div>
             </div>
           </Modal.Description>
         </Modal.Content>

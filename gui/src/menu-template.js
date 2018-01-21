@@ -30,9 +30,10 @@ export default () => {
         },
         {
           label: "Add/Modify Calculus",
-          click: function (item, focusedWindow) {
-            focusedWindow.send('menu:edit')
-          }
+          // click: function (item, focusedWindow) {
+          //   focusedWindow.send('menu:edit')
+          // }
+          click () { window.require('electron').ipcRenderer.send('menu:edit') }
         },
         {
           label: "Switch Calculus",

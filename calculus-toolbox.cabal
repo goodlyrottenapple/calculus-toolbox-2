@@ -1,5 +1,5 @@
 name:                calculus-toolbox
-version:             0.1.0.0
+version:             0.1.1
 -- synopsis:
 -- description:
 homepage:            https://github.com/goodlyrottenapple/calculus-toolbox-2
@@ -20,6 +20,7 @@ library
                      --  SequentCalc
                      --, SequentCalcJSON
                      , Rules
+                     , Rules.CutElimConditions
                      --, RulesInv
                      --, Terms.TH
                      , Terms.Parsers
@@ -56,7 +57,7 @@ library
                      , servant-foreign
                      -- , exceptions
   default-language:    Haskell2010
-  default-extensions:  OverloadedStrings, NoImplicitPrelude, DuplicateRecordFields
+  default-extensions:  OverloadedStrings, NoImplicitPrelude, DuplicateRecordFields, DataKinds, DeriveGeneric, DeriveAnyClass, FlexibleContexts
 
 executable calculus-toolbox
   hs-source-dirs:      app

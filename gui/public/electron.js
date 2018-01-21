@@ -2,6 +2,8 @@ const electron = require('electron');
 const child_process = require('child_process')
 // Module to control application life.
 const app = electron.app;
+const ipcMain = electron.ipcMain;
+
 // Module to create native browser window.
 const BrowserWindow = electron.BrowserWindow;
 
@@ -40,10 +42,11 @@ function urlPath(p) {
   return editUrl;
 };
 
-function createWindow(portNo) {
+
+function createWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({titleBarStyle: 'hidden-inset', width: 800, height: 600, show: false});
-    mainWindow.port = portNo
+    mainWindow.port = port
 
     // and load the index.html of the app.
 
@@ -55,17 +58,13 @@ function createWindow(portNo) {
     if(!production) 
       mainWindow.webContents.openDevTools();
 
-    const {ipcMain} = require('electron')
-    ipcMain.on('updateMacros', e => {
-      console.log('updateMacros received');
-      mainWindow.webContents.send('updateMacros2');
-    });
 
     // Emitted when the window is closed.
     mainWindow.on('closed', function () {
         // Dereference the window object, usually you would store windows
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
+        
         mainWindow = null
     })
 
@@ -77,7 +76,10 @@ function createWindow(portNo) {
 
 function createBackendServer () {
   // if running a dubug server in ghci, launch without spawning a process
-  if(process.env.DEBUG_PORT) return createWindow(process.env.DEBUG_PORT);
+  if(process.env.DEBUG_PORT) {
+    port = process.env.DEBUG_PORT
+    return createWindow()
+  }
 
   const execPath = production ?
     path.join(path.dirname(appRootDir), 'bin'):
@@ -151,9 +153,23 @@ app.on('activate', function () {
     // On OS X it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (mainWindow === null) {
-        createWindow(port)
+        createWindow()
     }
 });
 
+ipcMain.on('updateMacros', e => {
+  console.log('updateMacros received');
+  mainWindow.webContents.send('updateMacros2');
+});
+
+ipcMain.on('menu:edit', e => {
+  var win = new BrowserWindow({ width: 800, height: 700, title:"Modify calculus" });
+  win.port = port
+  win.loadURL(urlPath('/edit/'));
+  win.setMenu(null);
+  win.on('closed', function () {
+    win = null
+  })
+})
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.

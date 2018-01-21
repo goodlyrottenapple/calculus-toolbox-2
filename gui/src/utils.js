@@ -31,7 +31,7 @@ function getPort() {
 function prettyErrorMsg(e) {
   switch(e.tag){
     case 'TermParserError': 
-      return "Expected one of the following: " + e.report.expected.filter((item, pos) => e.report.expected.indexOf(item) == pos).map((s) => "'" + s + "'").join(', ') + " or a variable after position (" + e.position[0] + "," + (e.position[1]+1) + ")."
+      return "Expected one of the following: " + e.report.expected.filter((item, pos) => e.report.expected.indexOf(item) === pos).map((s) => "'" + s + "'").join(', ') + " or a variable after position (" + e.position[0] + "," + (e.position[1]+1) + ")."
     case 'AmbiguousTermParse': 
       return "Ambiguous parse. Expected one of the following: " + e.contents.expected.map((s) => "'" + s + "'").join(', ') + " or a variable"
     case 'TypeMismatch': 
