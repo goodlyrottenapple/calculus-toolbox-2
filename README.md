@@ -26,9 +26,9 @@ As display calculi have two levels of connectives, namely formula level connecti
 The type signature above defines a nullary connective, or a constant, at the formula level. In order for the type to be well-formed, further information is required:
 
 * `"0"` is the ASCII parser sugar. It is possible to define mixfix syntax, similar to Agda or Isabelle, by providing a string with 0 or more holes, denoted by an underscore.
-* `NonAssoc` defines the associativity of the operator (for binary connectives, the other two options are `LeftAssoc` and `RightAssoc`)
-* `10` defines how tightly the operator binds
-* `"\bot"` defines the LaTeX typesetting macro (if the connective is non-nullary, the arguments are referenced in the same way as LaTeX macros, namely `#1`, `#2`, etc.)
+* `NonAssoc` defines the associativity of the operator (for binary connectives, the other two options are `LeftAssoc` and `RightAssoc`).
+* `10` defines how tightly the operator binds.
+* `"\bot"` defines the LaTeX typesetting macro (if the connective is non-nullary, the arguments are referenced in the same way as LaTeX macros, namely `#1`, `#2`, etc.). For the supported subset of LaTeX functions, see [here](https://khan.github.io/KaTeX/function-support.html).
 
 We can define a conjunction in the following way: 
 
@@ -49,7 +49,7 @@ However, if we define multiple types, like in the case of the multitype display 
 ```
 default type atprop
 type agent
-box : formula{agent} -> formula{atprop} -> formula ("[_]_" , NonAssoc, 4, "\box_{#1} #2") 
+box : formula{agent} -> formula{atprop} -> formula ("[_]_" , NonAssoc, 4, "\Box_{#1} #2") 
 ```
 
 Notice that we declared `atprop` to be the default type (if there is more than one type in the definition, one has to be declared with the keyword `default`) and can thus omit `{atprop}` in `...-> formula ("[_...`, which is equivalent to `...-> formula{atprop} ("[_...`.
