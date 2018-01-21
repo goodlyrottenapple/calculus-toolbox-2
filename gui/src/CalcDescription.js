@@ -15,7 +15,8 @@ export default class CalcDescription extends Component {
     this.state = {
       name : '',
       calc : '',
-      rules : ''
+      rules : '',
+      key : 0
     }
     this.updateCalc = this.updateCalc.bind(this)
     this.updateRules = this.updateRules.bind(this)
@@ -47,7 +48,7 @@ export default class CalcDescription extends Component {
   getCalc() {
     const success = (data) => {
       console.log(data)
-      this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules })
+      this.setState({ name: data.name, calc: data.rawCalc, rules: data.rawRules, key: this.state.key+1 })
     }
     const error = (data) => console.log(data)
     getCalcDesc(getPort(), success, error)
@@ -97,12 +98,12 @@ export default class CalcDescription extends Component {
 
         <Form.Field>
           <label>Calculus Definition</label>
-          <CodeMirror className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={options}/>
+          <CodeMirror key={this.state.key} className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={options}/>
         </Form.Field>
 
         <Form.Field>
           <label>Rules</label>
-          <CodeMirror className="codeArea" value={this.state.rules} onChange={this.updateRules} options={options}/>
+          <CodeMirror key={this.state.key} className="codeArea" value={this.state.rules} onChange={this.updateRules} options={options}/>
         </Form.Field>
 
         <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save changes' />
