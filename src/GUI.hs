@@ -54,8 +54,10 @@ deriving instance Exception GUIError
 
 
 type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
+      :<|> "parseFormula" :> ReqBody '[JSON] (CalcType , Text) :> Get '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
       :<|> "macros" :> Get '[JSON] Macros
       :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+      :<|> "applyCut" :> ReqBody '[JSON] (DSequent 'ConcreteK Text, Term 'FormulaL 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
       :<|> CalculusDescriptionAPI
       :<|> ProofSearchAPI
 
@@ -207,17 +209,25 @@ parseDSeqH :: Maybe Text -> AppM r (LatexDSeq r 'ConcreteK)
 parseDSeqH (Just inStr) = freeze $ do
     r <- parseCDSeq inStr
     cd <- ask
-    return $ LatexDSeq (cd,r)
+    return $ LatexTerm (cd,r)
 parseDSeqH Nothing = throwIO $ err300 {errBody = "No input given"} -- redo this properly??
+
+
+parseFormulaH :: (CalcType , Text) -> AppM r (LatexTerm r (Term 'FormulaL 'ConcreteK Text))
+parseFormulaH (typ , inStr) = freeze $ do
+    r <- parseFormula typ inStr
+    cd <- ask
+    return $ LatexTerm (cd,r)
 
 
 getMacrosH :: AppM r Macros
 getMacrosH = freeze $ do
     fconns <- asks formulaConns
     sconns <- asks structureConns
-    return $ Macros $ M.fromList $
+    ms <- asks macros
+    return $ Macros $ ms `M.union` (M.fromList $
         (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) fconns) ++
-        (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns)
+        (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns))
 
 
 
@@ -227,7 +237,22 @@ getApplicableRulesH dseq = freeze $ do
     -- print cd
     r <- getApplicableRules dseq
     -- print r
-    return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
+    return $ M.toList $ (M.map . map) (\s -> LatexTerm (cd,s)) r
+
+
+applyCutH :: (DSequent 'ConcreteK Text , Term 'FormulaL 'ConcreteK Text) -> AppM [Rule Text] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+applyCutH (dseq@(DSeq _ typ _) , cutFormula) = freeze $ do
+    cd <- ask
+    let (Rule _ (Just latexName) premises conclusion) = cutRule typ
+    let appR = do {
+            udict <- unifySeq conclusion dseq ;
+            mapM (subSeq (M.insert "A" (Lift cutFormula) udict)) premises
+        }
+    case appR of 
+        Just [l,r] -> return [(latexName , [LatexTerm (cd,l), LatexTerm (cd,r)])]
+        _ -> return []
+    -- -- print r
+    -- return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
 
 
 type CalculusDescriptionAPI = "calcDesc"    :> Get '[JSON] CalcDesc
@@ -322,7 +347,7 @@ queryPSResultH i = do
         Nothing -> return []
         Just r' -> do
             (_, CalDescStore{..}) <- get
-            return [map (LatexDSeq . (parsed,)) r']
+            return [map (LatexTerm . (parsed,)) r']
 
 
 serverPS :: ServerT ProofSearchAPI (AppM [Rule Text])
@@ -337,7 +362,7 @@ readerServer :: Config [Rule Text] -> Server API
 readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
-server = parseDSeqH :<|> getMacrosH :<|> getApplicableRulesH :<|> serverCalcDesc :<|> serverPS
+server = parseDSeqH :<|> parseFormulaH :<|> getMacrosH :<|> getApplicableRulesH :<|> applyCutH :<|> serverCalcDesc :<|> serverPS
 
 myCors :: Middleware
 myCors = cors $ const $ Just customPolicy

@@ -24,12 +24,12 @@ subFormulas x = S.singleton x
 -- Each formula which is a constituent of some premise of a rule ρ 
 -- is a sub-formula of some formula in the conclusion of ρ.
 conditionC1 :: Ord a => Rule a -> Bool
-conditionC1 (Rule _ prems concl) = foldr ((&&) . (`S.isSubsetOf` subFormsInConcl) . formulasInDSequent) True prems
+conditionC1 (Rule _ _ prms cncl) = foldr ((&&) . (`S.isSubsetOf` subFormsInConcl) . formulasInDSequent) True prms
     where
-        subFormsInConcl = foldr (S.union . subFormulas) S.empty $ formulasInDSequent concl
-conditionC1 (RevRule _ prem concl) = 
-    (formulasInDSequent prem) `S.isSubsetOf` subFormsInConcl &&
-    (formulasInDSequent concl) `S.isSubsetOf` subFormsInPrem
+        subFormsInConcl = foldr (S.union . subFormulas) S.empty $ formulasInDSequent cncl
+conditionC1 (RevRule _ _ prm cncl) = 
+    (formulasInDSequent prm) `S.isSubsetOf` subFormsInConcl &&
+    (formulasInDSequent cncl) `S.isSubsetOf` subFormsInPrem
     where
-        subFormsInConcl = foldr (S.union . subFormulas) S.empty $ formulasInDSequent concl
-        subFormsInPrem  = foldr (S.union . subFormulas) S.empty $ formulasInDSequent prem
+        subFormsInConcl = foldr (S.union . subFormulas) S.empty $ formulasInDSequent cncl
+        subFormsInPrem  = foldr (S.union . subFormulas) S.empty $ formulasInDSequent prm

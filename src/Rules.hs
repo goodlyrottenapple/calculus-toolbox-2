@@ -80,7 +80,8 @@ unifyC xs ys = foldr unifyFold (Just $ M.empty) (zipV xs ys)
 
 
 unifySeq :: (Ord a, Ord b) => DSequent 'MetaK a -> DSequent 'ConcreteK b -> Maybe (Map a (ConcreteTerm 'StructureL b))
-unifySeq (DSeq ml _ mr) (DSeq cl _ cr) = unifyC (ml :> mr :> Nil) (cl :> cr :> Nil)
+unifySeq (DSeq ml t1 mr) (DSeq cl t2 cr) | t1 == t2 = unifyC (ml :> mr :> Nil) (cl :> cr :> Nil)
+                                         | otherwise = Nothing
 
 sub :: Ord a => Map a (ConcreteTerm l b) -> MetaTerm l a -> Maybe (ConcreteTerm l b)
 sub m (Meta x) = M.lookup x m
@@ -108,10 +109,10 @@ type RuleName = Text
 
 
 isApplicable :: (Ord a, Ord b) => Rule a -> DSequent 'ConcreteK b -> Maybe (Either [DSequent 'ConcreteK b] [DSequent 'ConcreteK b])
-isApplicable (Rule _ premises conclusion) dseq = do
+isApplicable (Rule _ _ premises conclusion) dseq = do
     udict <- unifySeq conclusion dseq
     liftM Left $ mapM (subSeq udict) premises
-isApplicable (RevRule _ premise conclusion) dseq = r1 <|> r2 -- we assume that a reversible rule should not be applicable in both direcions!!
+isApplicable (RevRule _ _ premise conclusion) dseq = r1 <|> r2 -- we assume that a reversible rule should not be applicable in both direcions!!
     where
         r1 = do
             udict <- unifySeq conclusion dseq
@@ -128,6 +129,15 @@ getApplicableRules dseq = do
         (Just (Left ps))  -> M.insert (ruleName r) ps m;
         (Just (Right ps)) -> M.insert (ruleName r <> "Rev") ps m;
         Nothing   -> m}) M.empty rs
+
+
+cutRule :: CalcType -> Rule Text
+cutRule typ@(Type t) = Rule{..}
+    where
+        name = "Cut" <> t
+        latexSyntax = Just $ "Cut_{" <> t <> "}"
+        prems = [DSeq (Meta "X") typ (Lift (Meta "A")), DSeq (Lift (Meta "A")) typ (Meta "Y")]
+        concl = DSeq (Meta "X") typ (Meta "Y")
 
 
 findProof' :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>

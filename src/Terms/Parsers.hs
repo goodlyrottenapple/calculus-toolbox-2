@@ -52,20 +52,25 @@ import           Text.Regex         (mkRegex, splitRegex)
 deriving instance Generic (Report P.String [P.String])
 deriving instance ToJSON (Report P.String [P.String])
 
+deriving instance Generic Associativity
+deriving instance ToJSON Associativity
+
 
 ------------------------- Parsing of the Description file -------------------------
 
 reservedCalcFile :: HashSet P.String
-reservedCalcFile = HS.fromList ["(", ")", "{", "}", "|-", "default", "type" ,":", "->"]
+reservedCalcFile = HS.fromList ["(", ")", "{", "}", "|-", "default", "type" ,":", "->", "{#", "#}"]
 
 data CalcFileParse = CalcTypeP Bool CalcType
-                   | ConP Level Text [Maybe CalcType] (Maybe CalcType) (Text, Text.Earley.Mixfix.Associativity, Int, Text) deriving Show
+                   | ConP Level Text [Maybe CalcType] (Maybe CalcType) (Text, Text.Earley.Mixfix.Associativity, Int, Text)
+                   | Pragma [Char] [Text] deriving (Show, Generic, ToJSON)
 
 grammarAssociativity :: Grammar r (Prod r P.String P.String Text.Earley.Mixfix.Associativity)
 grammarAssociativity =
     rule $  (\_ -> LeftAssoc) <$> namedToken "LeftAssoc"
         <|> (\_ -> NonAssoc) <$> namedToken "NonAssoc"
         <|> (\_ -> RightAssoc) <$> namedToken "RightAssoc"
+
 
 
 grammarConParams :: Grammar r (Prod r P.String P.String (Text, Text.Earley.Mixfix.Associativity, Int, Text))
@@ -90,6 +95,7 @@ grammarFTypes name = mdo
 grammarFinTypeCalculusDesc :: Grammar r (Prod r P.String P.String [CalcFileParse])
 grammarFinTypeCalculusDesc = mdo
     tname <- rule $ toS <$> satisfy (not . (`HS.member` reservedCalcFile))
+    pragma <- rule $ (\name params -> Pragma (toS name) params) <$> (namedToken "{#" *> tname) <*> ((some tname) <* namedToken "#}")
     typ <- rule $ ((CalcTypeP False) . Type . toS) <$> (namedToken "type" *> satisfy (not . (`HS.member` reservedCalcFile)))
             <|> ((CalcTypeP True) . Type . toS) <$> (namedToken "default" *> namedToken "type" *> satisfy (not . (`HS.member` reservedCalcFile)))
             <?> "type"
@@ -98,7 +104,7 @@ grammarFinTypeCalculusDesc = mdo
     conParams <- grammarConParams
     fcon <- rule $ (\n (xs,t) par -> ConP FormulaL n xs t par) <$> (tname <* namedToken ":") <*> ftyp <*> conParams
     scon <- rule $ (\n (xs,t) par -> ConP StructureL n xs t par) <$> (tname <* namedToken ":") <*> styp <*> conParams
-    return $ some (typ <|> fcon <|> scon)
+    return $ some (pragma <|> typ <|> fcon <|> scon)
 
 
 
@@ -107,6 +113,13 @@ tokenize :: P.String -> [P.String]
 tokenize ""        = []
 tokenize (' ':xs)  = tokenize xs
 tokenize ('\n':xs) = tokenize xs
+tokenize ('{':'#':xs) = "{#" : tokenize xs -- denotes a pragma
+tokenize ('#':'}':xs) = "#}" : tokenize xs -- denotes a pragma
+tokenize ('{':'-':xs)  = tokenize (comment xs) -- skip comments
+  where
+    comment ys = case map toS $ T.breakOn "-}" $ toS ys of
+        (_,('-':'}':vs)) -> vs
+        (_,vs)           -> vs
 tokenize ('"':xs)  = as : tokenize bs
   where
     (as, bs) = brackets xs
@@ -123,10 +136,12 @@ tokenize (x:xs)
 
 
 detokenize :: P.String -> Int -> Int -> (Int,Int)
-detokenize ""        pos _        = (pos,pos)
-detokenize (' ':xs)  pos nthToken = detokenize xs (pos+1) nthToken
-detokenize ('\n':xs) pos nthToken = detokenize xs (pos+1) nthToken
-detokenize ('"':xs)  pos nthToken = case nthToken of
+detokenize ""           pos _        = (pos,pos)
+detokenize (' ':xs)     pos nthToken = detokenize xs (pos+1) nthToken
+detokenize ('\n':xs)    pos nthToken = detokenize xs (pos+1) nthToken
+detokenize ('{':'#':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
+detokenize ('#':'}':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
+detokenize ('"':xs)     pos nthToken = case nthToken of
     0 -> (pos,fPos)
     _ -> detokenize bs (fPos+1) (nthToken-1)
   where
@@ -134,7 +149,7 @@ detokenize ('"':xs)  pos nthToken = case nthToken of
     brackets ys = case break (=='"') ys of
         (us,('"':vs)) -> (pos + length us + 1,vs)
         (us,vs)       -> (pos + length us,vs)
-detokenize (x:xs) pos nthToken
+detokenize (x:xs)       pos nthToken
   | x `HS.member` special = case nthToken of
     0 -> (pos,pos+1)
     _ -> detokenize xs (pos+1) (nthToken-1)
@@ -147,7 +162,7 @@ detokenize (x:xs) pos nthToken
     special = HS.fromList "(){}, \n"
 
 data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
-                            | AmbiguousCalcDescParse (Report P.String [P.String])
+                            | AmbiguousCalcDescParse (Report P.String [P.String]) [[CalcFileParse]]
                             | MultipleDefaultTypes
                             | NoTypesDeclared
                             | NoDefaultTypeDeclared
@@ -162,28 +177,46 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                                 connective :: Text,
                                 missingTypes :: Set CalcType
                               }
+                            | ConnNameContainsNums Text
+                            | InvalidPragma [Char] [Text]
                                 deriving (Show, Generic, ToJSON, Typeable)
 
 deriving instance Exception CalculusDescParseError
 
+applyPragma :: MonadThrowJSON m => FinTypeCalculusDescription a -> ([Char] , [Text]) -> m (FinTypeCalculusDescription a)
+applyPragma d@Description{..} ("MACRO" , [name, defn]) = return d{macros = M.insert ("\\" <> name) defn macros}
+-- applyPragma d                 ('-':'-':_ , _) = return d -- a comment pragma
+applyPragma _ (n, args) = throw $ InvalidPragma n args
+
 mkFinTypeCalculusDescription :: MonadThrowJSON m => [CalcFileParse] -> m (FinTypeCalculusDescription ())
 mkFinTypeCalculusDescription ps = do
+    -- _ <- getPragmas ps
     defaultType <- onlyOneDefault ps
     let types = S.fromList $ extractTypes ps
         rules = ()
+        prags = map (\(Pragma n args) -> (n, args)) $ filter (\x -> case x of { Pragma _ _ -> True ; _ -> False}) ps
     _ <- checkConns ps
     (formulaConns , structureConns) <- foldrM
         (\p (fCs,sCs) -> case p of {
             ConP FormulaL n ts t (ps',a,b,latex) -> do
+                _ <- checkName n
                 fC <- mkConnDescription defaultType types n ts t ps' a b latex
                 return $ (fC:fCs,sCs)
           ; ConP StructureL n ts t (ps',a,b, latex) -> do
+                _ <- checkName n
                 sC <- mkConnDescription defaultType types n ts t ps' a b latex
                 return $ (fCs,sC:sCs)
           ; _ -> return (fCs,sCs) }) ([],[]) ps
-    return $ Description{..}
+    foldM applyPragma Description{..} prags
 
     where
+        macros = M.empty
+        -- getPragmas prs = 
+        --     let 
+        --         prags = filter (\x -> case x of { Pragma _ _ -> True ; _ -> False}) prs
+        --     in 
+        --         if length prags == 0 then return () else throw $ FoundPragmas $ map (\(Pragma n args) -> (n, args)) prags
+
         -- onlyOneDefault :: [CalcFileParse] -> Except CalculusDescParseError CalcType
         onlyOneDefault prs = case calcTypes of
             []              -> throw NoTypesDeclared
@@ -234,13 +267,15 @@ mkFinTypeCalculusDescription ps = do
                 parserSyntax = prs
                 latexSyntax = latex
 
+        checkName name = if T.all (not . isDigit) name then return () else throw $ ConnNameContainsNums name
+
 
 parseFinTypeCalculusDescription :: MonadThrowJSON m => Text -> m (FinTypeCalculusDescription ())
 parseFinTypeCalculusDescription t =
     case fullParses (parser $ grammarFinTypeCalculusDesc) $ tokenize $ toS t of
         ([p] , _) -> mkFinTypeCalculusDescription p
         ([]  , r) -> throw $ CalcDescParserError r
-        (_   , r) -> throw $ AmbiguousCalcDescParse r -- this should hopefully not happen
+        (xs   , r) -> throw $ AmbiguousCalcDescParse r xs -- this should hopefully not happen
 
 
 
@@ -369,6 +404,21 @@ instance Exception TermParseError
 
 
 
+parseFormula :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
+    CalcType -> Text -> m (Term 'FormulaL 'ConcreteK Text)
+parseFormula typ inStr = do
+    e <- ask
+    case fullParses (parser $ runReaderT grammarTerm e) $ tokenize $ toS inStr of
+        ([p] , _) -> tryTypeable p
+        ([] , r@Report{..}) -> throw $ TermParserError r (detokenize (toS inStr) 0 (position-1))
+        ((p:_) , _) -> tryTypeable p
+
+    where
+        tryTypeable parsed = do
+            _ <- typeableC typ parsed
+            return parsed
+
+
 grammarDSeq :: TermGrammar 'StructureL k =>
     CalcMT x (Grammar r) (Prod r P.String P.String (DSequent k Text))
 grammarDSeq = mdo
@@ -402,15 +452,17 @@ parseCDSeq inStr = do
 
 grammarRule :: CalcMT x (Grammar r) (Prod r P.String P.String (Rule Text))
 grammarRule = mdo
-    rname   <- lift $ rule $ toS <$> satisfy (not . (`HS.member` reservedCalcFile))
+    let name = satisfy (not . (`HS.member` reservedCalcFile))
+    rname   <- lift $ rule $ (\x -> (toS x , Nothing)) <$> name
+            <|> (\n l -> (toS n , Just $ toS l)) <$> name <*> ((namedToken "(" *> name) <* namedToken ")")
     bar     <- lift $ rule $ satisfy (\x -> filter (/='-') x == "")
+    dblBar  <- lift $ rule $ satisfy (\x -> filter (/='=') x == "")
     exprSeq <- grammarDSeq
-    lift $ rule $ (\n c -> Rule n [] c) <$> (bar *> rname) <*> exprSeq
-            <|> (\ps n c -> Rule n ps c) <$> some exprSeq <*> (bar *> rname) <*> exprSeq
-            <|> (\p n c -> RevRule n p c) <$> exprSeq <*> (bar *> rname <* bar) <*> exprSeq
-            <|> (\p n c -> RevRule n p c) <$> exprSeq <*> (bar *> bar *> rname) <*> exprSeq
-
-
+    lift $ rule $ (\(n , l) c -> Rule n l [] c) <$> (bar *> rname) <*> exprSeq
+            <|> (\ps (n , l) c -> Rule n l ps c) <$> some exprSeq <*> (bar *> rname) <*> exprSeq
+            <|> (\p (n , l) c -> RevRule n l p c) <$> exprSeq <*> (bar *> rname <* bar) <*> exprSeq
+            <|> (\p (n , l) c -> RevRule n l p c) <$> exprSeq <*> (bar *> bar *> rname) <*> exprSeq
+            <|> (\p (n , l) c -> RevRule n l p c) <$> exprSeq <*> (dblBar *> rname) <*> exprSeq
 
 
 splitRules :: P.String -> [P.String]
@@ -420,19 +472,18 @@ splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
         emptyString x = x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n")
 
 
-
 -- this version does not throw an error on ambiguous parse,
 -- but choses the most general version of the rule
 parseRules :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
     Text -> m [Rule Text]
-parseRules str = parse $ (splitRules . toS) str
+parseRules str = parse $ (filter (\(_ , tokens) -> tokens /= []) . map (\x -> (x , tokenize x)) . splitRules . toS) str
     where
         parse :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
-            [P.String] -> m [Rule Text]
+            [(P.String , [P.String])] -> m [Rule Text]
         parse [] = return []
-        parse (r:rs) = do
+        parse ((r,rTokens):rs) = do
             cd <- ask
-            r' <- case fullParses (parser $ runReaderT grammarRule cd) $ tokenize $ r of
+            r' <- case fullParses (parser $ runReaderT grammarRule cd) $ rTokens of
                 ([] , rep@Report{..}) -> throw $ TermParserError rep (detokenize (toS r) 0 (position-1))
                 (prules@(r'':_) , _) -> do
                     prulesMetaMap <- (mapM typeableRule prules)

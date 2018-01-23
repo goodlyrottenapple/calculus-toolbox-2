@@ -40,12 +40,14 @@ import qualified Data.Text          as T
 
 import           Text.Earley.Mixfix (Associativity (..))
 
-newtype LatexDSeq r k = LatexDSeq { unMk :: (FinTypeCalculusDescription r, DSequent k Text) }
+newtype LatexTerm r t = LatexTerm { unMk :: (FinTypeCalculusDescription r, t) }
 
-instance ToJSON (LatexDSeq r 'ConcreteK) where
-    toJSON (LatexDSeq (d, s)) = object [
-            "latex" .= (toJSON $ runReader (pprint s) d) -- <> " \\vdash " <> pprint r) ,
-          , "term" .= toJSON s
+type LatexDSeq r k = LatexTerm r (DSequent k Text)
+
+instance (PPrint t , ToJSON t) => ToJSON (LatexTerm r t) where
+    toJSON (LatexTerm (d, t)) = object [
+            "latex" .= (toJSON $ runReader (pprint t) d) -- <> " \\vdash " <> pprint r) ,
+          , "term" .= toJSON t
         ]
 
 

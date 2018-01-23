@@ -137,7 +137,7 @@ type ConcreteTerm l a = Term l 'ConcreteK a
 
 
 
-newtype CalcType = Type Text deriving (Eq, Ord, Show, Generic, ToJSON)
+newtype CalcType = Type Text deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 data ConnDescription (l :: Level) = ConnDescription {
     name         :: Text
@@ -155,11 +155,12 @@ data FinTypeCalculusDescription r = Description {
   , formulaConns   :: [ConnDescription 'FormulaL]
   , structureConns :: [ConnDescription 'StructureL]
   , rules          :: r
+  , macros         :: Map Text Text
 } deriving Show
 
 
 emptyFinTypeCalculusDescription :: r -> FinTypeCalculusDescription r
-emptyFinTypeCalculusDescription r = Description S.empty (Type "") [] [] r
+emptyFinTypeCalculusDescription r = Description S.empty (Type "") [] [] r M.empty
 
 
 data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving (Show, Eq)
@@ -272,14 +273,23 @@ instance FromJSON a => FromJSON (DSequent 'ConcreteK a) where
 -- data Sequent k a = Seq [Term 'FormulaL k a] [Term 'FormulaL k a]
 
 
-data Rule a = Rule Text [DSequent 'MetaK a] (DSequent 'MetaK a)
-            | RevRule Text (DSequent 'MetaK a) (DSequent 'MetaK a)
-              deriving (Show, Eq, Ord, Generic, ToJSON)
+data Rule a = 
+    Rule {
+        name :: Text,
+        latexSyntax :: Maybe Text,
+        prems :: [DSequent 'MetaK a],
+        concl :: (DSequent 'MetaK a)
+    }
+  | RevRule Text (Maybe Text) (DSequent 'MetaK a) (DSequent 'MetaK a)
+        deriving (Show, Eq, Ord, Generic, ToJSON)
 
 
 ruleName :: Rule a -> Text
-ruleName (Rule n _ _) = n
-ruleName (RevRule n _ _) = n
+ruleName (Rule n Nothing _ _) = n
+ruleName (Rule _ (Just l) _ _) = l
+ruleName (RevRule n Nothing _ _) = n
+ruleName (RevRule _ (Just l) _ _) = l
+
 
 type CalcMT r m = ReaderT (FinTypeCalculusDescription r) m
 
@@ -348,7 +358,7 @@ typeableCon tyF f acc t c xs = do
     if t == outType then do
         let tsxs = zip inTypes xs
         foldrM (\(t', x) acc' -> tyF acc' t' x) acc tsxs
-    else throw $ TypeMismatch c t outType
+    else throw $ TypeMismatch (name, parserSyntax) t outType
 
 
 instance TypeableCTerm 'AtomL where
@@ -483,20 +493,20 @@ fixMDSeq acc (DSeq l t r) = do
 
 
 typeableRule :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => Rule Text -> m (Map Text (Level, CalcType))
-typeableRule (Rule _ premises conclusion) = do
+typeableRule (Rule _ _ premises conclusion) = do
     conclAcc <- typeableMDSeq' M.empty conclusion
     foldrM (\dseq acc -> typeableMDSeq' acc dseq) conclAcc premises
-typeableRule (RevRule _ premise conclusion) = do
+typeableRule (RevRule _ _ premise conclusion) = do
     conclAcc <- typeableMDSeq' M.empty conclusion
     typeableMDSeq' conclAcc premise
 
 
 fixRule :: (MonadThrowJSON m) => Map Text (Level, t) -> Rule Text -> m (Rule Text)
-fixRule acc (Rule name premises conclusion) = do
+fixRule acc (Rule name latex premises conclusion) = do
     concl' <- fixMDSeq acc conclusion
     prems' <- mapM (fixMDSeq acc) premises
-    return $ Rule name prems' concl'
-fixRule acc (RevRule name premise conclusion) = do
+    return $ Rule name latex prems' concl'
+fixRule acc (RevRule name latex premise conclusion) = do
     concl' <- fixMDSeq acc conclusion
     prem' <- fixMDSeq acc premise
-    return $ RevRule name prem' concl'
+    return $ RevRule name latex prem' concl'
