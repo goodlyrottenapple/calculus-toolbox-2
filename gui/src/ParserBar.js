@@ -46,7 +46,7 @@ export default class ParserBar extends Component {
 
     const didPressEnter = (e.key === 'Enter') ? true : false
     const success = (data) => {
-      // console.log(data)
+      console.log(data)
       this.setState({ sequent: data , parseError: '' })
       if (didPressEnter) this.props.callback(data);
     }

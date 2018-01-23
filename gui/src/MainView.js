@@ -162,7 +162,10 @@ export default class MainView extends Component {
   }
 
   reloadMacros() {
-    const success = (data) => this.setState({ macros: data })
+    const success = (data) => {
+      console.log(data)
+      this.setState({ macros: data })
+    }
     const failure = (data) => console.log(data)
     getMacros(getPort(), success, failure)
   }
@@ -318,7 +321,7 @@ export default class MainView extends Component {
                      assms={this.state.assms}
                      sequent={this.state.ptSequent}
                      saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
-                     rule=""
+                     rule=' '
                      ref={(node) => {this.pt = node}} />
         </div>
       </Sidebar.Pusher>

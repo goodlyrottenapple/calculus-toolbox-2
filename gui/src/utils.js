@@ -35,8 +35,9 @@ function prettyErrorMsg(e) {
     case 'AmbiguousTermParse': 
       return "Ambiguous parse. Expected one of the following: " + e.contents.expected.map((s) => "'" + s + "'").join(', ') + " or a variable"
     case 'TypeMismatch': 
-      return "There is a type mismatch. Expected '" + e.contents.term + 
-        "' to have type '" + e.contents.expectedType + "', but found type '" + e.contents.foundType + "' instead."
+      console.log(e.contents.term.length === 2)
+      return "There is a type mismatch. Expected " + (e.contents.term.length === 2 ? `the connective '${e.contents.term[0]}' (${e.contents.term[1]})` : `the variable '${e.contents.term}'`) + 
+        " to have type '" + e.contents.expectedType + "', but found type '" + e.contents.foundType + "' instead."
     case 'NoDefaultTypeDeclared':
       return "You have declared multiple types, without providing a default one. Please add the keyword 'default' before one of the type definitions"
     case 'MultipleDefaultTypes':

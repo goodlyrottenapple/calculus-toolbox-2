@@ -1,7 +1,7 @@
 import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
-import { postApplicableRules, postLaunchPS, postCancelPS, postQueryPSResult } from './ServantApi.js'
+import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQueryPSResult } from './ServantApi.js'
 import { getPort } from './utils.js'
 
 import { Dropdown, Modal, Button, List, Icon, Loader } from 'semantic-ui-react'
@@ -12,7 +12,7 @@ export default class ProofTree extends Component {
       term : {},
       latex : ''
     },
-    rule: '',
+    rule: ' ',
     macros: {},
     assms : [],
     children : []
@@ -35,6 +35,7 @@ export default class ProofTree extends Component {
     this.runPS = this.runPS.bind(this)  
     this.cancelPS = this.cancelPS.bind(this)  
     this.pollPS = this.pollPS.bind(this)  
+    this.applyCut = this.applyCut.bind(this)  
 
     this.toggle = this.toggle.bind(this)
     this.toJSON = this.toJSON.bind(this)  
@@ -61,16 +62,17 @@ export default class ProofTree extends Component {
       <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={r} rule=""/>
     )
     this.setState({rule:r.rule, children:cs})
-    this.toggle('addingRules')
+    if(this.state.addingRules) this.toggle('addingRules')
   }
 
   deleteAbove() {
-    this.setState({rule:'', children:[]})
+    this.setState({rule:' ', children:[]})
   }
 
   getPossibleRules() {
     const success = (data) => {
       this.setState({possibleRules: data })
+      // console.log(data)
       this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
@@ -108,6 +110,17 @@ export default class ProofTree extends Component {
     }
     const error = (data) => console.log(data)
     postQueryPSResult(getPort(), this.state.psId, success, error)
+  }
+
+  applyCut() {
+    const success = (data) => {
+      // this.setState({possibleRules: data })
+      console.log(data)
+      this.addAbove({rule:data[0][0],sequents:data[0][1]})
+      // this.toggle('addingRules')
+    }
+    const error = (data) => console.log(data)
+    postApplyCut(getPort(), [this.props.sequent.term , {Lift:{Base:"todo"}}], success, error)
   }
 
   appendPT(pt) {
@@ -193,6 +206,9 @@ export default class ProofTree extends Component {
           <Dropdown.Item onClick={this.deleteAbove}>
             Delete above
           </Dropdown.Item>
+          <Dropdown.Item onClick={this.applyCut}>
+            Apply Cut
+          </Dropdown.Item>
           <Dropdown.Item onClick={this.runPS}>
             Proof Search
           </Dropdown.Item>
@@ -204,7 +220,7 @@ export default class ProofTree extends Component {
       <Button basic color="blue" style={{marginBottom: '-1px'}} onClick={() => this.addAbove({rule:name,sequents:rules})}>
         <List horizontal>
           <List.Item>
-            <List.Content>{name}</List.Content>
+            <List.Content><KaTeXRenderer math={name} macros={this.props.macros}/></List.Content>
           </List.Item>
           {rules.map((rule) => 
             <List.Item key={rule.latex}>
@@ -255,7 +271,9 @@ export default class ProofTree extends Component {
             <td colSpan={span} align="center">
               <div className="ruleBar">
               {Menu}
-              <span className="ruleTag">{this.state.rule}</span>
+              <span className="ruleTag">
+                <KaTeXRenderer math={this.state.rule} macros={this.props.macros}/>
+              </span>
               </div>
               {addAboveModal}
               {psModal}
