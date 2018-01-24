@@ -10,7 +10,6 @@ import { Route, Switch } from 'react-router-dom'
 export default class App extends Component {
   render() {
   	const Settings = ({ match }) => <Preferences opts={match.params.opts}/>
-  	const CalcDesc = ({ match }) => <CalcDescription port={match.params.port}/>
 
     return (
       <Switch>
