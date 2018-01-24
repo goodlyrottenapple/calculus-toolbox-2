@@ -113,6 +113,7 @@ tokenize :: P.String -> [P.String]
 tokenize ""        = []
 tokenize (' ':xs)  = tokenize xs
 tokenize ('\n':xs) = tokenize xs
+tokenize ('\t':xs) = tokenize xs
 tokenize ('{':'#':xs) = "{#" : tokenize xs -- denotes a pragma
 tokenize ('#':'}':xs) = "#}" : tokenize xs -- denotes a pragma
 tokenize ('{':'-':xs)  = tokenize (comment xs) -- skip comments
@@ -139,8 +140,17 @@ detokenize :: P.String -> Int -> Int -> (Int,Int)
 detokenize ""           pos _        = (pos,pos)
 detokenize (' ':xs)     pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('\n':xs)    pos nthToken = detokenize xs (pos+1) nthToken
+detokenize ('\t':xs)    pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('{':'#':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
 detokenize ('#':'}':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
+detokenize ('{':'-':xs) pos nthToken = case nthToken of
+    0 -> (pos,fPos)
+    _ -> detokenize bs (fPos+1) (nthToken-1)
+  where
+    (fPos, bs) = comment xs
+    comment ys = case map toS $ T.breakOn "-}" $ toS ys of
+        (us,('-':'}':vs)) -> (pos + T.length us + 2, vs)
+        (us,vs)           -> (pos + T.length us, vs)
 detokenize ('"':xs)     pos nthToken = case nthToken of
     0 -> (pos,fPos)
     _ -> detokenize bs (fPos+1) (nthToken-1)
@@ -466,7 +476,7 @@ grammarRule = mdo
 
 
 splitRules :: P.String -> [P.String]
-splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n\n+")
+splitRules = filter (not . emptyString) . splitRegex (mkRegex "\n[[:space:]]*\n+")
     where
         emptyString :: P.String -> Bool
         emptyString x = x == "" || (S.fromList x) `S.isSubsetOf` (S.fromList " \n")

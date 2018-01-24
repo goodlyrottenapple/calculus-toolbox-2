@@ -54,7 +54,7 @@ deriving instance Exception GUIError
 
 
 type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
-      :<|> "parseFormula" :> ReqBody '[JSON] (CalcType , Text) :> Get '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
+      :<|> "parseFormula" :> ReqBody '[JSON] (CalcType , Text) :> Post '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
       :<|> "macros" :> Get '[JSON] Macros
       :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
       :<|> "applyCut" :> ReqBody '[JSON] (DSequent 'ConcreteK Text, Term 'FormulaL 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
@@ -272,6 +272,9 @@ modifyCalcH :: CalcDesc -> AppM [Rule Text] ()
 modifyCalcH CalcDesc{..} = do
     when (name == "") $ throw $ InvalidName name
     cd <- parseFinTypeCalculusDescription rawCalc
+
+    print $ (filter (\(_ , tokens) -> tokens /= []) . map (\x -> (x , tokenize x)) . splitRules . toS) rawRules
+
     rules <- runReaderT (parseRules rawRules) cd
     -- print rules
     put (name , CalDescStore cd{rules = rules} rawCalc rawRules)

@@ -21,9 +21,9 @@ exports.getParseDSeq = function(port, val, onSuccess, onError) {
   xhr.send(null);
 };
 
-exports.getParseFormula = function(port, body, onSuccess, onError) {
+exports.postParseFormula = function(port, body, onSuccess, onError) {
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', `http://localhost:${port}/parseFormula`, true);
+  xhr.open('POST', `http://localhost:${port}/parseFormula`, true);
   xhr.setRequestHeader('Cache-Control', 'no-cache');
   xhr.setRequestHeader('Accept', 'application/json');
   xhr.setRequestHeader('Content-Type', 'application/json');

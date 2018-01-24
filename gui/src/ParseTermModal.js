@@ -1,13 +1,11 @@
 import React, {Component} from 'react'
-import './AddAssm.css'
+import './ParseTermModal.css'
 
-import { getPort, prettyErrorMsg } from './utils.js'
-import { getParseDSeq } from './ServantApi.js'
-
+import { prettyErrorMsg } from './utils.js'
 import { Modal, Button, Input, Transition } from 'semantic-ui-react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 
-export default class AddAssm extends Component {
+export default class ParseTermModal extends Component {
   
   constructor(props) {
     super(props)
@@ -56,7 +54,7 @@ export default class AddAssm extends Component {
     }
 
     if(e.target.value)
-      getParseDSeq(getPort(), e.target.value, success, error)
+      this.props.parser(e.target.value, success, error)
     else
       this.setState({ sequent: {latex: ' ', term : {}}, addEnabled: false, parseError: '' })
   }
@@ -64,7 +62,7 @@ export default class AddAssm extends Component {
     const isDisabled = this.state.addEnabled ? '' : 'disabled'
     return (
       <Modal dimmer={'blurring'} open={this.props.visible}>
-        <Modal.Header>Add a new assumption</Modal.Header>
+        <Modal.Header>{this.props.header}</Modal.Header>
         <Modal.Content>
           <Modal.Description>
             <div id="AddAssmInput">
@@ -82,7 +80,7 @@ export default class AddAssm extends Component {
             onClick={() => {
               this.props.onAdd(this.state.sequent);
               this.setState({ sequent: {latex: ' ', term : {}}, addEnabled: false, parseError: '' })
-            }}>Add</Button>
+            }}>{this.props.confirmButton}</Button>
           <Button negative 
             onClick={() => {
               this.props.onClose();

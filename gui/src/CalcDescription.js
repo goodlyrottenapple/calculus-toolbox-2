@@ -5,6 +5,10 @@ import { getPort, prettyErrorMsg } from './utils.js'
 
 import CodeMirror from 'react-codemirror'
 import '../node_modules/codemirror/lib/codemirror.css'
+// import '../node_modules/codemirror/mode/haskell/haskell.js'
+import './syntaxHighlighting/defns.js'
+import './syntaxHighlighting/rules.js'
+
 import { Form, Button } from 'semantic-ui-react'
 
 export default class CalcDescription extends Component {
@@ -84,9 +88,16 @@ export default class CalcDescription extends Component {
     postModifyCalc(getPort(), body, success, error)
   }
   render() {
-    const options = {
+    const optionsDefns = {
       lineNumbers: true,
-      lineWrapping: true
+      lineWrapping: true,
+      mode: "calcDefns"
+    };
+
+    const optionsRules = {
+      lineNumbers: true,
+      lineWrapping: true,
+      mode: "calcRules"
     };
     return (
       <div style={{padding:'20px'}}>
@@ -98,12 +109,12 @@ export default class CalcDescription extends Component {
 
         <Form.Field>
           <label>Calculus Definition</label>
-          <CodeMirror key={this.state.key} className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={options}/>
+          <CodeMirror key={this.state.key} className="codeArea" value={this.state.calc} onChange={this.updateCalc} options={optionsDefns}/>
         </Form.Field>
 
         <Form.Field>
           <label>Rules</label>
-          <CodeMirror key={this.state.key} className="codeArea" value={this.state.rules} onChange={this.updateRules} options={options}/>
+          <CodeMirror key={this.state.key} className="codeArea" value={this.state.rules} onChange={this.updateRules} options={optionsRules}/>
         </Form.Field>
 
         <Button positive onClick={this.saveCalc} labelPosition='right' icon='save' content='Save changes' />

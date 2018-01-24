@@ -143,7 +143,7 @@ cutRule typ@(Type t) = Rule{..}
 findProof' :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
     Int -> Set (DSequent 'ConcreteK b) -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
 findProof' 0 _ _ = return []
-findProof' n prems s = if s `S.member` prems then return [PT [] "Prem" s] else do
+findProof' n prems s = if s `S.member` prems then return [PT [] "Axiom" s] else do
     appM <- getApplicableRules s
     aux1 s $ M.toList appM
 

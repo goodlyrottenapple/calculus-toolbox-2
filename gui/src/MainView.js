@@ -6,9 +6,9 @@ import ProofTree from './ProofTree.js'
 import ParserBar from './ParserBar.js'
 // import DocName from './DocName.js'
 import SwitchCalc from './SwitchCalc.js'
-import AddAssm from './AddAssm.js'
+import ParseTermModal from './ParseTermModal.js'
 
-import { getMacros } from './ServantApi.js'
+import { getMacros, getParseDSeq } from './ServantApi.js'
 import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
 import KaTeXRenderer from './KaTeXRenderer.js'
@@ -298,17 +298,21 @@ export default class MainView extends Component {
       >
         <Button style={{float:'right', margin:'10px'}} basic circular icon='close' onClick={() => this.toggle('sidebarVisible')} />
         <div style={{margin:'10px'}}>
-          <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Assumptions</Header>
+          <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Axioms</Header>
 
           {this.state.assms.length > 0 && <Segment.Group>
             {assms}
           </Segment.Group>}
-          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}><Icon name='add' /> Add Assumption</Button>
+          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}><Icon name='add' /> Add an axiom</Button>
 
-          <AddAssm visible={this.state.addAssmVisible}
-                   macros={this.state.macros} 
-                   onClose={() => this.toggle('addAssmVisible')}
-                   onAdd={(data) => {addAssm(data); this.toggle('addAssmVisible')}}/>
+          <ParseTermModal 
+            visible={this.state.addAssmVisible}
+            macros={this.state.macros} 
+            header="Add a new axiom"
+            confirmButton="Add axiom"
+            parser={(trm, success, error) => getParseDSeq(getPort(), trm, success, error)}
+            onClose={() => this.toggle('addAssmVisible')}
+            onAdd={(data) => {addAssm(data); this.toggle('addAssmVisible')}}/>
         </div>
       </Sidebar>
       <Sidebar.Pusher style={{minHeight: '100vh'}}>

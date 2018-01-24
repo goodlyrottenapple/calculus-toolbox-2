@@ -1,8 +1,9 @@
 import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
-import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQueryPSResult } from './ServantApi.js'
+import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQueryPSResult, postParseFormula } from './ServantApi.js'
 import { getPort } from './utils.js'
+import ParseTermModal from './ParseTermModal.js'
 
 import { Dropdown, Modal, Button, List, Icon, Loader } from 'semantic-ui-react'
 
@@ -27,6 +28,7 @@ export default class ProofTree extends Component {
       addingRules: false,
       psId: 0,
       doingPS: false,
+      cutModalVisible: false,
       possibleRules: [],
       children: props.children
     }
@@ -112,7 +114,8 @@ export default class ProofTree extends Component {
     postQueryPSResult(getPort(), this.state.psId, success, error)
   }
 
-  applyCut() {
+  applyCut(formula) {
+    console.log(this.props.sequent)
     const success = (data) => {
       // this.setState({possibleRules: data })
       console.log(data)
@@ -120,7 +123,7 @@ export default class ProofTree extends Component {
       // this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
-    postApplyCut(getPort(), [this.props.sequent.term , {Lift:{Base:"todo"}}], success, error)
+    postApplyCut(getPort(), [this.props.sequent.term , formula], success, error)
   }
 
   appendPT(pt) {
@@ -206,7 +209,7 @@ export default class ProofTree extends Component {
           <Dropdown.Item onClick={this.deleteAbove}>
             Delete above
           </Dropdown.Item>
-          <Dropdown.Item onClick={this.applyCut}>
+          <Dropdown.Item onClick={() => this.toggle('cutModalVisible')}>
             Apply Cut
           </Dropdown.Item>
           <Dropdown.Item onClick={this.runPS}>
@@ -277,6 +280,14 @@ export default class ProofTree extends Component {
               </div>
               {addAboveModal}
               {psModal}
+              <ParseTermModal 
+                visible={this.state.cutModalVisible}
+                macros={this.props.macros}
+                confirmButton="Apply Cut"
+                header={`Please supply a cut formula of type '${this.props.sequent.term.DSeq.type}'`}
+                parser={(trm, success, error) => postParseFormula(getPort(), [this.props.sequent.term.DSeq.type, trm], success, error)}
+                onClose={() => this.toggle('cutModalVisible')}
+                onAdd={(data) => {this.applyCut(data.term); this.toggle('cutModalVisible')}}/>
             </td>
           </tr>
         </tbody>
