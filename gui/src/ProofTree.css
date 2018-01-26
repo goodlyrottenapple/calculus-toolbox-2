@@ -20,6 +20,10 @@
     margin-top: -4px;
 }
 
+.ruleButton {
+	width: 100%;
+}
+
 .hasRight {
 	padding-right: 35px;
 }

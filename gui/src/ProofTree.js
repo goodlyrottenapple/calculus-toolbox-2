@@ -5,7 +5,7 @@ import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQuer
 import { getPort } from './utils.js'
 import ParseTermModal from './ParseTermModal.js'
 
-import { Dropdown, Modal, Button, List, Icon, Loader } from 'semantic-ui-react'
+import { Dropdown, Modal, Button, List, Icon, Loader, Label } from 'semantic-ui-react'
 
 export default class ProofTree extends Component {
   static defaultProps = {
@@ -15,7 +15,7 @@ export default class ProofTree extends Component {
     },
     rule: ' ',
     macros: {},
-    assms : [],
+    axioms : [],
     children : []
   }
 
@@ -61,7 +61,7 @@ export default class ProofTree extends Component {
   addAbove(r) {
     // console.log(r)
     const cs = r.sequents.map((r) => 
-      <ProofTree macros={this.props.macros} assms={this.props.assms} sequent={r} rule=""/>
+      <ProofTree macros={this.props.macros} axioms={this.props.axioms} sequent={r} rule=' ' abbrevs={this.props.abbrevs}/>
     )
     this.setState({rule:r.rule, children:cs})
     if(this.state.addingRules) this.toggle('addingRules')
@@ -91,8 +91,8 @@ export default class ProofTree extends Component {
     const error = (data) => console.log(data)
     // 15 is the proof depth parameter
     console.log("port: " + getPort())
-    console.log("assms: " + this.props.assms)
-    postLaunchPS(getPort(), [15,this.props.assms.map((a) => a.term),this.props.sequent.term], success, error)
+    console.log("axioms: " + this.props.axioms)
+    postLaunchPS(getPort(), [15,this.props.axioms.map((a) => a.term),this.props.sequent.term], success, error)
   }
 
   pollPS() {
@@ -136,7 +136,7 @@ export default class ProofTree extends Component {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.map((c) => this.fromJSON(c))
-    return <ProofTree macros={this.props.macros} assms={this.props.assms} 
+    return <ProofTree macros={this.props.macros} axioms={this.props.axioms} abbrevs={this.props.abbrevs}
                       sequent={concl} rule={r} children={cs}/>
   }
 
@@ -144,7 +144,7 @@ export default class ProofTree extends Component {
     const r = Object.keys(pt)[0];
     const concl = pt[r].conclusion;
     const cs = pt[r].premises.reverse().map((c) => this.fromJSONFileInput(c))
-    return <ProofTree macros={this.props.macros} assms={this.props.assms} 
+    return <ProofTree macros={this.props.macros} axioms={this.props.axioms} abbrevs={this.props.abbrevs}
                       sequent={concl} rule={r} children={cs}/>
   }
 
@@ -220,19 +220,25 @@ export default class ProofTree extends Component {
     )
 
     const rules = this.state.possibleRules.map(([name,rules]) => 
-      <Button basic color="blue" style={{marginBottom: '-1px'}} onClick={() => this.addAbove({rule:name,sequents:rules})}>
-        <List horizontal>
-          <List.Item>
-            <List.Content><KaTeXRenderer math={name} macros={this.props.macros}/></List.Content>
-          </List.Item>
-          {rules.map((rule) => 
-            <List.Item key={rule.latex}>
-              <List.Content>
+      <List.Item>
+        <List.Content>
+          <Button className="ruleButton" as='div' labelPosition='right' onClick={() => this.addAbove({rule:name,sequents:rules})}>
+            <Button color='blue' style={{minWidth: '100px'}}>
+              <KaTeXRenderer math={name} macros={this.props.macros}/>
+            </Button>
+              {rules.map((rule, index) => 
+              <Label as='a' basic color='blue' 
+                style={{
+                  width: '100%', 
+                  borderTopRightRadius: rules.length === index+1 ? "4px" : 0,
+                  borderBottomRightRadius: rules.length === index+1 ? "4px" : 0,
+                  overflow: 'auto'
+                }}>
                 <KaTeXRenderer math={rule.latex} macros={this.props.macros}/>
-              </List.Content>
-            </List.Item>)}
-        </List>
-      </Button>
+              </Label>)}
+            </Button>
+          </List.Content>
+      </List.Item>
     )
 
     const addAboveModal =(
@@ -240,9 +246,9 @@ export default class ProofTree extends Component {
         <Modal.Header>Select a Rule To Apply</Modal.Header>
         <Modal.Content>
           <Modal.Description>
-            <Button.Group vertical style={{width:"100%"}}>
+            <List style={{width:"100%"}}>
               {rules}
-            </Button.Group>
+            </List>
           </Modal.Description>
         </Modal.Content>
         <Modal.Actions>
@@ -285,7 +291,7 @@ export default class ProofTree extends Component {
                 macros={this.props.macros}
                 confirmButton="Apply Cut"
                 header={`Please supply a cut formula of type '${this.props.sequent.term.DSeq.type}'`}
-                parser={(trm, success, error) => postParseFormula(getPort(), [this.props.sequent.term.DSeq.type, trm], success, error)}
+                parser={(trm, success, error) => postParseFormula(getPort(), {text: trm, opts:[this.props.sequent.term.DSeq.type, this.props.abbrevs]}, success, error)}
                 onClose={() => this.toggle('cutModalVisible')}
                 onAdd={(data) => {this.applyCut(data.term); this.toggle('cutModalVisible')}}/>
             </td>

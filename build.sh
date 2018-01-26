@@ -2,7 +2,7 @@
 
 mkdir -p gui/resources
 stack install
-upx gui/resources/calculus-toolbox
+# upx gui/resources/calculus-toolbox
 cd gui
 resources/calculus-toolbox generateservantapi 'src/ServantApi.js'
 npm install

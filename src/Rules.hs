@@ -52,7 +52,13 @@ instance FromJSON a => FromJSON (PT a) where
 
 
 unify :: (Ord a, Ord b) => MetaTerm l a -> ConcreteTerm l b -> Maybe (Map a (ConcreteTerm l b))
-unify (Meta x) y = Just $ M.singleton x y
+unify (Meta x) t@(Abbrev _ _) = Just $ M.singleton x t
+unify m@(Lift _) (Abbrev _ c@(Lift _)) = unify m c
+unify m@(Lift _) (Abbrev _ (Abbrev _ c)) = unify m c
+unify m@(Con _ _) (Abbrev _ c@(Con _ _)) = unify m c
+unify m@(Con _ _) (Abbrev _ (Abbrev _ c)) = unify m c
+
+unify (Meta x) c = Just $ M.singleton x c
 unify (Lift lx) (Lift ly) = case unify lx ly of
     Just u  ->  Just $ M.map (\t -> Lift t) u
     Nothing -> Nothing
@@ -60,6 +66,7 @@ unify (Lift lx) (Lift ly) = case unify lx ly of
 unify (Con (C c1) vs) (Con (C c2) us) = case eqLen vs us of
     Just Refl -> if c1 == c2 then unifyC vs us else Nothing
     Nothing   -> Nothing
+
 unify _ _ = Nothing
 
 

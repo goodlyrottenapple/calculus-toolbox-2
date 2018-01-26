@@ -2,15 +2,6 @@
 // Distributed under an MIT license: http://codemirror.net/LICENSE
 
 import CodeMirror from 'codemirror'
-// (function(mod) {
-//   if (typeof exports == "object" && typeof module == "object") // CommonJS
-//     mod(require("../../node_modules/codemirror/lib/codemirror"));
-//   // else if (typeof define == "function" && define.amd) // AMD
-//   //   define(["../../node_modules/codemirror/lib/codemirror"], mod);
-//   else // Plain browser env
-//     mod(CodeMirror);
-// })(function(CodeMirror) {
-// "use strict";
 
 CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
 
@@ -37,7 +28,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
 
     var ch = source.next();
     if (specialRE.test(ch)) {
-      if (ch == '{' && source.eat('-')) {
+      if (ch === '{' && source.eat('-')) {
         var t = "comment";
         // if (source.eat('#')) {
         //   t = "meta";
@@ -47,7 +38,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
       return null;
     }
 
-    if (ch == '\'') {
+    if (ch === '\'') {
       if (source.eat('\\')) {
         source.next();  // should handle other escapes here
       }
@@ -60,7 +51,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
       return "string error";
     }
 
-    if (ch == '"') {
+    if (ch === '"') {
       return switchState(source, setState, stringLiteral);
     }
 
@@ -78,7 +69,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
     }
 
     if (digitRE.test(ch)) {
-      if (ch == '0') {
+      if (ch === '0') {
         if (source.eat(/[xX]/)) {
           source.eatWhile(hexitRE); // should require at least 1
           return "integer";
@@ -101,11 +92,11 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
       return t;
     }
 
-    if (ch == "." && source.eat("."))
+    if (ch === "." && source.eat("."))
       return "keyword";
 
     if (symbolRE.test(ch)) {
-      // if (ch == '-' && source.eat(/-/)) {
+      // if (ch === '-' && source.eat(/-/)) {
       //   source.eatWhile(/-/);
       //   if (!source.eat(symbolRE)) {
       //     source.skipToEnd();
@@ -113,7 +104,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
       //   }
       // }
       var t = "variable";
-      if (ch == ':') {
+      if (ch === ':') {
         t = "variable-2";
       }
       source.eatWhile(symbolRE);
@@ -124,19 +115,19 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
   }
 
   function ncomment(type, nest) {
-    if (nest == 0) {
+    if (nest === 0) {
       return normal;
     }
     return function(source, setState) {
       var currNest = nest;
       while (!source.eol()) {
         var ch = source.next();
-        if (ch == '{' && source.eat('-')) {
+        if (ch === '{' && source.eat('-')) {
           ++currNest;
         }
-        else if (ch == '-' && source.eat('}')) {
+        else if (ch === '-' && source.eat('}')) {
           --currNest;
-          if (currNest == 0) {
+          if (currNest === 0) {
             setState(normal);
             return type;
           }
@@ -150,11 +141,11 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
   function stringLiteral(source, setState) {
     while (!source.eol()) {
       var ch = source.next();
-      if (ch == '"') {
+      if (ch === '"') {
         setState(normal);
         return "string";
       }
-      if (ch == '\\') {
+      if (ch === '\\') {
         if (source.eol() || source.eat(whiteCharRE)) {
           setState(stringGap);
           return "string";

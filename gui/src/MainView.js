@@ -8,7 +8,7 @@ import ParserBar from './ParserBar.js'
 import SwitchCalc from './SwitchCalc.js'
 import ParseTermModal from './ParseTermModal.js'
 
-import { getMacros, getParseDSeq } from './ServantApi.js'
+import { getMacros, postParseDSeq, postParseFormula } from './ServantApi.js'
 import { urlPath, getPort } from './utils.js'
 import menuTemplate from './menu-template.js'
 import KaTeXRenderer from './KaTeXRenderer.js'
@@ -23,15 +23,17 @@ export default class MainView extends Component {
 
     this.state = {
       macros: {},
-      assms: [],
+      axioms: [],
       name: '',
       ptSequent: {
         latex : '',
         term: {}
       },
+      abbrevs: {"abbrevsFormula":[],"abbrevsStructure":[]},
       sidebarVisible: false,
       switchCalcVisible: false,
-      addAssmVisible: false
+      addAxiomVisible: false,
+      addAbbrevsFVisible: false
     }
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
@@ -39,6 +41,8 @@ export default class MainView extends Component {
     this.updateName = this.updateName.bind(this)
     // this.openEdit = this.openEdit.bind(this)
     this.mkPT = this.mkPT.bind(this)
+    this.getAbbrevs = this.getAbbrevs.bind(this)
+    this.openSession = this.openSession.bind(this)
   }
 
   setMenu() {
@@ -134,15 +138,18 @@ export default class MainView extends Component {
         return console.error(err);
       }
       const session = JSON.parse(data.toString())
-      // console.log(session);
 
       this.mkPT(session.pt)
+      if(session.version > 1) {
+        console.log(session);
+        this.setState({axioms: session.axioms, abbrevs: session.abbrevs})
+      }
     });
   }
 
   saveSession(file) {
     const fs = window.require('fs')
-    const content = JSON.stringify({ version:1, pt: this.pt.toJSON() });
+    const content = JSON.stringify({ version:2, pt: this.pt.toJSON(), axioms: this.state.axioms, abbrevs: this.state.abbrevs });
 
     fs.writeFile(file, content, (err) => {
       if(err){
@@ -254,6 +261,12 @@ export default class MainView extends Component {
   //   document.removeEventListener("keydown", this._handleKeyDown.bind(this));
   // }
 
+  getAbbrevs() {
+    const abbrevsF = this.state.abbrevs.abbrevsFormula.map((e) => [e[0], e[1].term])
+    const abbrevsS = this.state.abbrevs.abbrevsStructure.map((e) => [e[0], e[1].term])
+    return {abbrevsFormula: abbrevsF, abbrevsStructure: abbrevsS}
+  }
+
 
   render() {
     // const MainMenu = (
@@ -265,30 +278,47 @@ export default class MainView extends Component {
     //   </Dropdown>
     // )
 
-    const addAssm = (data) => {
-      var array = this.state.assms;
+    const addAxiom = (data) => {
+      var array = this.state.axioms;
       array.push(data);
-      this.setState({ assms: array });
+      this.setState({ axioms: array });
     }
 
-    const removeAssm = (index) => {
-      var array = this.state.assms;
+    const removeAxiom = (index) => {
+      var array = this.state.axioms;
       array.splice(index, 1);
-      this.setState({ assms: array });
+      this.setState({ axioms: array });
     }
 
-    const assms = this.state.assms.map((a, index) => 
+    const axioms = this.state.axioms.map((a, index) => 
       <Segment key={a.latex+index}>
         <KaTeXRenderer math={a.latex} macros={this.state.macros}/>
         <Button basic icon="close" 
           style={{boxShadow:'none', fontSize: '0.8em', float:'right', marginTop: '-24px'}}
-          onClick={() => removeAssm(index)}/>
+          onClick={() => removeAxiom(index)}/>
+      </Segment>)
+
+
+    const abbrevsF = this.state.abbrevs.abbrevsFormula.map((a, index) => 
+      <Segment key={a[1].latex+index}>
+        <div style={{overflowY:'hidden', marginRight:'30px'}}>
+          <KaTeXRenderer math={`${a[0][0]} = ${a[1].latex}`} macros={this.state.macros}/>
+        </div>
+        <Button basic icon="close" 
+          style={{boxShadow:'none', fontSize: '0.8em', float:'right', marginTop: '-24px'}}
+          onClick={() => {
+            console.log("being called")
+            var array = this.state.abbrevs;
+            array.abbrevsFormula.splice(index, 1);
+            this.setState({ abbrevs: array });
+          }}
+          />
       </Segment>)
 
     const sidebarArea = (<Sidebar.Pushable as={Segment} style={{marginBottom: '0px', border:'0px'}}>
       <Sidebar
         as={Menu}
-        style={{borderTopWidth: '0px', borderBottomWidth: '0px', borderRightWidth: '0px'}}
+        style={{borderTopWidth: '0px', borderBottomWidth: '0px', borderRightWidth: '0px', paddingBottom:'70px'}}
         animation='overlay'
         width='wide'
         direction='right'
@@ -300,19 +330,42 @@ export default class MainView extends Component {
         <div style={{margin:'10px'}}>
           <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Axioms</Header>
 
-          {this.state.assms.length > 0 && <Segment.Group>
-            {assms}
+          {this.state.axioms.length > 0 && <Segment.Group>
+            {axioms}
           </Segment.Group>}
-          <Button basic onClick={() => {console.log(this.state.assms); this.toggle('addAssmVisible')}}><Icon name='add' /> Add an axiom</Button>
+          <Button basic onClick={() => {console.log(this.state.axioms); this.toggle('addAxiomVisible')}}><Icon name='add' /> Add an axiom</Button>
 
           <ParseTermModal 
-            visible={this.state.addAssmVisible}
+            visible={this.state.addAxiomVisible}
             macros={this.state.macros} 
             header="Add a new axiom"
             confirmButton="Add axiom"
-            parser={(trm, success, error) => getParseDSeq(getPort(), trm, success, error)}
-            onClose={() => this.toggle('addAssmVisible')}
-            onAdd={(data) => {addAssm(data); this.toggle('addAssmVisible')}}/>
+            parser={(trm, success, error) => postParseDSeq(getPort(), {text: trm, opts: this.getAbbrevs()}, success, error)}
+            onClose={() => this.toggle('addAxiomVisible')}
+            onAdd={(data) => {addAxiom(data); this.toggle('addAxiomVisible')}}/>
+
+
+          <Header style={{marginTop:'26px'}} textAlign='left' size='tiny'>Abbreviations</Header>
+
+          {this.state.abbrevs.abbrevsFormula.length > 0 && <Segment.Group>
+            {abbrevsF}
+          </Segment.Group>}
+          <Button basic onClick={() => {console.log(this.state.axioms); this.toggle('addAbbrevsFVisible')}}><Icon name='add' /> Add a formula abbreviation</Button>
+
+          <ParseTermModal 
+            visible={this.state.addAbbrevsFVisible}
+            macros={this.state.macros} 
+            header="Add a formula abbreviation"
+            confirmButton="Add abbreviation"
+            addingAbbrev={true}
+            parser={(trm, typ, success, error) => postParseFormula(getPort(), {text: trm, opts: [typ, this.getAbbrevs()]}, success, error)}
+            onClose={() => this.toggle('addAbbrevsFVisible')}
+            onAdd={(varName, type, term) => {
+              // console.log(varName, type, term);
+              var array = this.state.abbrevs;
+              array.abbrevsFormula.push([[varName, type], term]);
+              this.setState({ abbrevs: array });
+              this.toggle('addAbbrevsFVisible')}}/>
         </div>
       </Sidebar>
       <Sidebar.Pusher style={{minHeight: '100vh'}}>
@@ -322,10 +375,11 @@ export default class MainView extends Component {
         </div>
         <div id="ProofTree">
           <ProofTree macros={this.state.macros}
-                     assms={this.state.assms}
+                     axioms={this.state.axioms}
                      sequent={this.state.ptSequent}
                      saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
                      rule=' '
+                     abbrevs={this.getAbbrevs()}
                      ref={(node) => {this.pt = node}} />
         </div>
       </Sidebar.Pusher>
@@ -349,7 +403,7 @@ export default class MainView extends Component {
         <SwitchCalc visible={this.state.switchCalcVisible} 
                     onClose={() => this.toggle('switchCalcVisible')}
                     onSwitch={switchFn}/>
-        <ParserBar macros={this.state.macros} callback={this.mkPTstub}/>
+        <ParserBar macros={this.state.macros} callback={this.mkPTstub} abbrevs={this.getAbbrevs()}/>
       </div>)
   }
 }

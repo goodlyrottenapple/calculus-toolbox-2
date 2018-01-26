@@ -116,6 +116,21 @@ tokenize ('\n':xs) = tokenize xs
 tokenize ('\t':xs) = tokenize xs
 tokenize ('{':'#':xs) = "{#" : tokenize xs -- denotes a pragma
 tokenize ('#':'}':xs) = "#}" : tokenize xs -- denotes a pragma
+
+
+
+
+tokenize ('{':'{':xs)  = "{{" : case map toS $ T.breakOn "}}" $ toS xs of
+        (vs,('}':'}':'f':ws)) -> toS vs : "}}f" : tokenize ws
+        (vs,('}':'}':'s':ws)) -> toS vs : "}}s" : tokenize ws
+        (vs,('}':'}':ws)) -> toS vs : "}}" : tokenize ws
+        (vs,_)           -> [toS vs]
+
+-- tokenize ('{':'{':xs) = "{{" : tokenize xs -- denotes an abbrev
+-- tokenize ('}':'}':'f':xs) = "}}f" : tokenize xs -- denotes a formula abbrev
+-- tokenize ('}':'}':'s':xs) = "}}s" : tokenize xs -- denotes a structure abbrev
+-- tokenize ('}':'}':xs) = "}}" : tokenize xs -- denotes an abbrev
+
 tokenize ('{':'-':xs)  = tokenize (comment xs) -- skip comments
   where
     comment ys = case map toS $ T.breakOn "-}" $ toS ys of
@@ -143,6 +158,10 @@ detokenize ('\n':xs)    pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('\t':xs)    pos nthToken = detokenize xs (pos+1) nthToken
 detokenize ('{':'#':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
 detokenize ('#':'}':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
+detokenize ('{':'{':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
+detokenize ('}':'}':'f':xs) pos nthToken = detokenize xs (pos+3) (nthToken+1)
+detokenize ('}':'}':'s':xs) pos nthToken = detokenize xs (pos+3) (nthToken+1)
+detokenize ('}':'}':xs) pos nthToken = detokenize xs (pos+2) (nthToken+1)
 detokenize ('{':'-':xs) pos nthToken = case nthToken of
     0 -> (pos,fPos)
     _ -> detokenize bs (fPos+1) (nthToken-1)
@@ -220,7 +239,12 @@ mkFinTypeCalculusDescription ps = do
     foldM applyPragma Description{..} prags
 
     where
-        macros = M.empty
+        macros = M.fromList [
+                ("\\abbrevColor" , "#21ba45"), 
+                ("\\turnstileColor" , "#f2711c"), 
+                ("\\seqabbrev" , "{\\color{\\abbrevColor}{#1}}"), 
+                ("\\seqturnstile", "\\,\\,{\\color{\\turnstileColor}\\vdash}\\,\\,")
+            ]
         -- getPragmas prs = 
         --     let 
         --         prags = filter (\x -> case x of { Pragma _ _ -> True ; _ -> False}) prs
@@ -341,7 +365,15 @@ mixfixParts = do
     Description{..} <- ask
     return $ HS.fromList $
         [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) formulaConns   , Just s <- ys] ++
-        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) structureConns , Just s <- ys] ++ ["(", ")", "|-"]
+        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) structureConns , Just s <- ys] ++ ["(", ")", "|-", "{", "}"]
+
+
+mixfixPartsAbbrevs :: Monad m => CalcMT x m (HashSet P.String)
+mixfixPartsAbbrevs = do
+    Description{..} <- ask
+    return $ HS.fromList $
+        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) formulaConns   , Just s <- ys] ++
+        [s | ys <- map (\ConnDescription{..} -> holey $ toS parserSyntax) structureConns , Just s <- ys] ++ ["|-", "{", "}"]
 
 
 class TermGrammar l k where
@@ -367,10 +399,13 @@ instance TermGrammar 'FormulaL 'ConcreteK where
         tableF      <- hTable formulaConns
         lookupF     <- lookupH formulaConns
         reserved    <- mixfixParts
-
+        -- reservedAbbrevs <- mixfixPartsAbbrevs
+        abbrev      <- lift $ rule $ (\n -> Abbrev (toS n) (Lift $ Base $ toS n)) <$>
+                            (namedToken "{{" *> satisfy (\_ -> True) <* (namedToken "}}" <|> namedToken "}}f"))
         base        <- lift $ rule $ (Base . toS) <$> satisfy (not . (`HS.member` reserved))
         atomF       <- lift $ rule $ Lift <$> base
                         <|> namedToken "(" *> exprF <* namedToken ")"
+                        <|> abbrev
         exprF       <- lift $ mixfixExpression tableF atomF (mkCon lookupF)
         return exprF
 
@@ -391,8 +426,11 @@ instance TermGrammar 'StructureL 'ConcreteK where
         tableS  <- hTable structureConns
         lookupS <- lookupH structureConns
 
+        -- reservedAbbrevs <- mixfixPartsAbbrevs
+        abbrev      <- lift $ rule $ (\n -> Abbrev (toS n) (Lift $ Lift $ Base $ toS n)) <$> (namedToken "{{" *> satisfy (\_ -> True) <* (namedToken "}}" <|> namedToken "}}s"))
+
         exprF   <- grammarTerm
-        atomS   <- lift $ rule $ Lift <$> exprF
+        atomS   <- lift $ rule $ abbrev <|> Lift <$> exprF
                     <|> namedToken "(" *> exprS <* namedToken ")"
         exprS   <- lift $ mixfixExpression tableS atomS (mkCon lookupS)
         return exprS
@@ -413,10 +451,9 @@ data TermParseError = TermParserError {
 instance Exception TermParseError
 
 
-
 parseFormula :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
-    CalcType -> Text -> m (Term 'FormulaL 'ConcreteK Text)
-parseFormula typ inStr = do
+    (CalcType, AbbrevsMapInternal) -> Text -> m (Term 'FormulaL 'ConcreteK Text)
+parseFormula (typ , abbrevsMap) inStr = do
     e <- ask
     case fullParses (parser $ runReaderT grammarTerm e) $ tokenize $ toS inStr of
         ([p] , _) -> tryTypeable p
@@ -426,7 +463,7 @@ parseFormula typ inStr = do
     where
         tryTypeable parsed = do
             _ <- typeableC typ parsed
-            return parsed
+            substAbbrevsTerm abbrevsMap typ parsed
 
 
 grammarDSeq :: TermGrammar 'StructureL k =>
@@ -442,18 +479,18 @@ grammarDSeq = mdo
 
 
 parseCDSeq :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) =>
-    Text -> m (DSequent 'ConcreteK Text)
-parseCDSeq inStr = do
+    AbbrevsMapInternal -> Text -> m (DSequent 'ConcreteK Text)
+parseCDSeq abbrevsMap inStr = do
     e <- ask
     case fullParses (parser $ runReaderT grammarDSeq e) $ tokenize $ toS inStr of
-        ([p] , _) -> tryTypeable p
+        ([p] , _) -> typeAndReplaceAbbrevs p
         ([] , r@Report{..}) -> throw $ TermParserError r (detokenize (toS inStr) 0 (position-1))
-        ((p:_) , _) -> tryTypeable p
+        ((p:_) , _) -> typeAndReplaceAbbrevs p
 
     where
-        tryTypeable parsed = do
+        typeAndReplaceAbbrevs parsed = do
             _ <- typeableCDSeq' M.empty parsed
-            return parsed
+            substAbbrevs abbrevsMap parsed
 
 
 

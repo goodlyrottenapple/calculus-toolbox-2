@@ -71,6 +71,7 @@ data Term (l :: Level) (k :: TermKind) a where
     Lift :: SingI l => Term (Lower l) k a -> Term l k a
     Con :: (KnownNat n, SingI l, IsAtom l ~ 'False) => -- this is a bit of a hack :/
         Conn l n -> Vec n (Term l k a) -> Term l k a
+    Abbrev :: Text -> Term (Raise l) 'ConcreteK a -> Term (Raise l) 'ConcreteK a
 
 deriving instance Show a => Show (Term l k a)
 
@@ -115,6 +116,8 @@ instance Ord a => Ord (Term 'StructureL 'MetaK a) where
 
 instance Ord a => Ord (Term 'AtomL 'ConcreteK a) where
     compare (Base a) (Base b) = compare a b
+    compare (Abbrev _ a) b = compare a b
+    compare a (Abbrev _ b) = compare a b
     compare _ _ = undefined
 
 
@@ -123,12 +126,16 @@ instance Ord a => Ord (Term 'FormulaL 'ConcreteK a) where
     compare (Lift _) (Con _ _)    = LT
     compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Lift _)    = GT
+    compare (Abbrev _ a) b = compare a b
+    compare a (Abbrev _ b) = compare a b
 
 instance Ord a => Ord (Term 'StructureL 'ConcreteK a) where
     compare (Lift a) (Lift b)     = compare a b
     compare (Lift _) (Con _ _)    = LT
     compare (Con _ vs) (Con _ us) = compare (toList vs) (toList us)
     compare (Con _ _) (Lift _)    = GT
+    compare (Abbrev _ a) b = compare a b
+    compare a (Abbrev _ b) = compare a b
 
 
 type MetaTerm l a = Term l 'MetaK a
@@ -185,6 +192,12 @@ instance ToJSON a => ToJSON (Term l k a) where
                 "terms" .= toJSON vs
             ]
         ]
+    toJSON (Abbrev n t) = object [
+            "Abbrev" .= object [
+                "name" .= toJSON n,
+                "term" .= toJSON t
+            ]
+        ]
 
 mkCon :: (IsAtom l ~ 'False, SingI l, StringConv s Text, Ord t, IsString s) =>
     Map t s -> t -> [Term l k a] -> Term l k a
@@ -220,6 +233,12 @@ instance FromJSON a => FromJSON (Term 'FormulaL 'ConcreteK a) where
                 n <- con .: "name";
                 xs <- con .: "terms";
                 return $ unsafeMkCon n xs
+            },
+            do {
+                ab <- o .: "Abbrev";
+                n <- ab .: "name";
+                t <- ab .: "term";
+                return $ Abbrev n t
             }
         ]
 
@@ -231,6 +250,12 @@ instance FromJSON a => FromJSON (Term 'StructureL 'ConcreteK a) where
                 n <- con .: "name";
                 xs <- con .: "terms";
                 return $ unsafeMkCon n xs
+            },
+            do {
+                ab <- o .: "Abbrev";
+                n <- ab .: "name";
+                t <- ab .: "term";
+                return $ Abbrev n t
             }
         ]
 
@@ -365,15 +390,18 @@ instance TypeableCTerm 'AtomL where
     typeableC' acc t (Base a) = if a `M.member` acc then
         let t' = acc M.! a in if t == t' then return $ acc else throw $ TypeMismatch a t t'
         else return $ M.insert a t acc
+    typeableC' acc t (Abbrev _ a) = typeableC' acc t a
     typeableC' _ _ trm = throw $ IncorrectInput trm
 
 instance TypeableCTerm 'FormulaL where
     typeableC' acc t (Lift a) = typeableC' acc t a
     typeableC' acc t (Con (C c) vs) = typeableCon typeableC' formulaConns acc t c (toList vs)
+    typeableC' acc t (Abbrev _ a) = typeableC' acc t a
 
 instance TypeableCTerm 'StructureL where
     typeableC' acc t (Lift a) = typeableC' acc t a
     typeableC' acc t (Con (C c) vs) = typeableCon typeableC' structureConns acc t c (toList vs)
+    typeableC' acc t (Abbrev _ a) = typeableC' acc t a
 
 
 typeableC :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m, Ord a, Show a, Typeable a, ToJSON a, TypeableCTerm l) => CalcType ->
@@ -510,3 +538,60 @@ fixRule acc (RevRule name latex premise conclusion) = do
     concl' <- fixMDSeq acc conclusion
     prem' <- fixMDSeq acc premise
     return $ RevRule name latex prem' concl'
+
+
+
+data AbbrevsMap a b = AbbrevsMap {
+    abbrevsFormula :: Map (Text, CalcType) a,
+    abbrevsStructure :: Map (Text, CalcType) b
+} deriving (Show, Generic, FromJSON, ToJSON)
+
+type AbbrevsMapInternal = AbbrevsMap (Term 'FormulaL 'ConcreteK Text) (Term 'StructureL 'ConcreteK Text)
+
+class SubstAbbrevsTerm l where
+    substAbbrevsTerm :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+        AbbrevsMapInternal -> CalcType -> Term l 'ConcreteK Text -> m (Term l 'ConcreteK Text)
+
+
+
+data ShouldBeImpossibleException = ShouldBeImpossibleException deriving(Show, Generic, ToJSON)
+
+instance Exception ShouldBeImpossibleException
+
+substAbbrevsCon :: (SubstAbbrevsTerm l , MonadReader (FinTypeCalculusDescription r) m, MonadThrowJSON m) =>
+    (FinTypeCalculusDescription r -> [ConnDescription l]) -> AbbrevsMapInternal -> Text -> Vec n (Term l 'ConcreteK Text) -> m (Vec n (Term l 'ConcreteK Text))
+substAbbrevsCon f amap c ts = do
+    conns <- connMap f
+    let ConnDescription{..} = conns M.! c
+    case vec inTypes of
+        SomeVec its -> case eqLen its ts of
+            Just Refl -> mapM (\(typ', t) -> substAbbrevsTerm amap typ' t) (zipV its ts)
+            Nothing -> throw $ ShouldBeImpossibleException
+
+
+instance SubstAbbrevsTerm 'FormulaL where
+    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n t) = case  M.lookup (n , typ) abbrevsFormula of
+        Just t' -> return $ Abbrev n t'
+        Nothing -> return t
+    substAbbrevsTerm amap _ (Con con@(C c) ts) = do
+        ts' <- substAbbrevsCon formulaConns amap c ts
+        return $ Con con ts'
+    substAbbrevsTerm _ _ t = return t
+
+
+instance SubstAbbrevsTerm 'StructureL where
+    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n t) = case  M.lookup (n , typ) abbrevsStructure of
+        Just t' -> return $ Abbrev n t'
+        Nothing -> return t
+    substAbbrevsTerm amap typ (Lift t) = liftM Lift $ substAbbrevsTerm amap typ t
+    substAbbrevsTerm amap _ (Con con@(C c) ts) = do
+        ts' <- substAbbrevsCon structureConns amap c ts
+        return $ Con con ts'
+
+substAbbrevs :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
+    AbbrevsMapInternal -> DSequent 'ConcreteK Text -> m (DSequent 'ConcreteK Text)
+substAbbrevs amap (DSeq l typ r) = do
+    l' <- substAbbrevsTerm amap typ l
+    r' <- substAbbrevsTerm amap typ r
+    return $ DSeq l' typ r'
+

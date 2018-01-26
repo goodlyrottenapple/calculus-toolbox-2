@@ -53,8 +53,14 @@ data GUIError = CalculusDescriptionNotLoaded
 deriving instance Exception GUIError
 
 
-type API = "parseDSeq" :> QueryParam "val" Text :> Get '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
-      :<|> "parseFormula" :> ReqBody '[JSON] (CalcType , Text) :> Post '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
+
+data ParseTerm o = ParseTerm {
+    text :: Text,
+    opts :: o
+} deriving (Generic, FromJSON)
+
+type API = "parseDSeq" :> ReqBody '[JSON] (ParseTerm AbbrevsMapInternal) :>  Post '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
+      :<|> "parseFormula" :> ReqBody '[JSON] (ParseTerm (CalcType, AbbrevsMapInternal)) :> Post '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
       :<|> "macros" :> Get '[JSON] Macros
       :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
       :<|> "applyCut" :> ReqBody '[JSON] (DSequent 'ConcreteK Text, Term 'FormulaL 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
@@ -75,6 +81,10 @@ data CalDescStore c = CalDescStore {
 
 type PTDSeq = PT (DSequent 'ConcreteK Text)
 type LatexPTDSeq = PT (LatexDSeq [Rule Text] 'ConcreteK)
+
+
+type AbbrevsMapLatex = AbbrevsMap (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text)) (LatexTerm [Rule Text] (Term 'StructureL 'ConcreteK Text))
+
 
 data Config r = Config {
     currentCalcDec :: IORef (Text, CalDescStore (FinTypeCalculusDescription r))
@@ -205,17 +215,18 @@ instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
     throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
 
 
-parseDSeqH :: Maybe Text -> AppM r (LatexDSeq r 'ConcreteK)
-parseDSeqH (Just inStr) = freeze $ do
-    r <- parseCDSeq inStr
+parseDSeqH :: ParseTerm AbbrevsMapInternal -> AppM r (LatexDSeq r 'ConcreteK)
+parseDSeqH ParseTerm{..} = freeze $ do
+    -- print $ tokenize $ toS text
+    r <- parseCDSeq opts text
     cd <- ask
     return $ LatexTerm (cd,r)
-parseDSeqH Nothing = throwIO $ err300 {errBody = "No input given"} -- redo this properly??
+-- parseDSeqH Nothing = throwIO $ err300 {errBody = "No input given"} -- redo this properly??
 
 
-parseFormulaH :: (CalcType , Text) -> AppM r (LatexTerm r (Term 'FormulaL 'ConcreteK Text))
-parseFormulaH (typ , inStr) = freeze $ do
-    r <- parseFormula typ inStr
+parseFormulaH :: ParseTerm (CalcType, AbbrevsMapInternal) -> AppM r (LatexTerm r (Term 'FormulaL 'ConcreteK Text))
+parseFormulaH ParseTerm{..} = freeze $ do
+    r <- parseFormula opts text
     cd <- ask
     return $ LatexTerm (cd,r)
 
@@ -256,6 +267,7 @@ applyCutH (dseq@(DSeq _ typ _) , cutFormula) = freeze $ do
 
 
 type CalculusDescriptionAPI = "calcDesc"    :> Get '[JSON] CalcDesc
+                         :<|> "getTypes" :> Get '[JSON] (Set CalcType)
                          :<|> "modifyCalc"  :> ReqBody '[JSON] CalcDesc :> Post '[JSON] ()
                          :<|> "deleteCalc"  :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
                          :<|> "loadCalc"    :> ReqBody '[JSON] FilePath :> Post '[JSON] ()
@@ -266,6 +278,11 @@ caclDescH :: AppM r CalcDesc
 caclDescH = do
     (name, CalDescStore{..}) <- get
     return $ CalcDesc name rawCalc rawRules
+
+getTypesH :: AppM r (Set CalcType)
+getTypesH = do
+    (_, CalDescStore{..}) <- get
+    return $ types parsed
 
 
 modifyCalcH :: CalcDesc -> AppM [Rule Text] ()
@@ -329,7 +346,7 @@ listCalculiH = do
         filterCalc (_:y:xs) | otherwise = filterCalc (y:xs)
 
 serverCalcDesc :: ServerT CalculusDescriptionAPI (AppM [Rule Text])
-serverCalcDesc = caclDescH :<|> modifyCalcH :<|> deleteCalcH :<|> loadCalcH :<|> listCalculiH
+serverCalcDesc = caclDescH :<|> getTypesH :<|> modifyCalcH :<|> deleteCalcH :<|> loadCalcH :<|> listCalculiH
 
 
 type ProofSearchAPI = "launchPS"      :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int

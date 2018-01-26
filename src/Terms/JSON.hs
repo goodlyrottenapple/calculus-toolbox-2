@@ -59,6 +59,7 @@ getLevelT _ = fromSing (sing :: Sing l)
 getBinding :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Int
 getBinding (Base _) = return (maxBound :: Int)
 getBinding (Meta _) = return (maxBound :: Int)
+getBinding (Abbrev _ _) = return (maxBound :: Int)
 getBinding (Lift x) = getBinding x
 getBinding (Con (C c) _) = do
     conns <- connMap' @l
@@ -69,6 +70,7 @@ getBinding (Con (C c) _) = do
 getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Text.Earley.Mixfix.Associativity
 getAssoc (Base _) = return NonAssoc
 getAssoc (Meta _) = return NonAssoc
+getAssoc (Abbrev _ _) = return NonAssoc
 getAssoc (Lift _) = return NonAssoc
 getAssoc (Con (C c) _) = do
     conns <- connMap' @l
@@ -92,7 +94,7 @@ instance PPrint a => PPrint (DSequent l a) where
     pprint (DSeq l _ r) = do
         pl <- pprint l
         pr <- pprint r
-        return $ pl <> " \\vdash " <> pr
+        return $ pl <> " \\seqturnstile " <> pr
 
 instance PPrint a => PPrint (Term l k a) where
     pprint t@(Meta a) = do
@@ -101,6 +103,10 @@ instance PPrint a => PPrint (Term l k a) where
         return $ "?_{" <> l <> "} " <> pa
     pprint (Base a) = pprint a
     pprint (Lift a) = pprint a
+    pprint (Abbrev n _) = do 
+        pn <- pprint n
+        return $ "\\seqabbrev{" <> pn <> "}" -- print abbrevs
+    -- pprint (Abbrev _ t) = pprint t -- print full terms
     pprint trm@(Con (C con) vs) = do
         bnd <- getBinding trm
         ass <- getAssoc trm

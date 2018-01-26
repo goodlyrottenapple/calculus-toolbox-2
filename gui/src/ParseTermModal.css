@@ -2,11 +2,11 @@
   /*position: fixed;*/
   bottom: 0;
   width: 100%;
-  padding :15px;
+  /*padding-top : 10px;*/
   /*display: flex;*/
 }
 
-#AddAssmInput input {
+.parseBar.input input {
   font-family: 'Fira Code';
   -webkit-font-feature-settings: "liga" on, "calt" on;
   -webkit-font-smoothing: antialiased;

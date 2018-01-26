@@ -1,29 +1,7 @@
 
-exports.getParseDSeq = function(port, val, onSuccess, onError) {
+exports.postParseDSeq = function(port, body, onSuccess, onError) {
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', `http://localhost:${port}/parseDSeq` + '?val=' + encodeURIComponent(val), true);
-  xhr.setRequestHeader('Cache-Control', 'no-cache');
-  xhr.setRequestHeader('Accept', 'application/json');
-  xhr.onreadystatechange = function () {
-    var res = null;
-    if (xhr.readyState === 4) {
-      if (xhr.status === 204 || xhr.status === 205) {
-        onSuccess();
-      } else if (xhr.status >= 200 && xhr.status < 300) {
-        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
-        if (res) onSuccess(res);
-      } else {
-        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
-        if (res) onError(res);
-      }
-    }
-  };
-  xhr.send(null);
-};
-
-exports.postParseFormula = function(port, body, onSuccess, onError) {
-  var xhr = new XMLHttpRequest();
-  xhr.open('POST', `http://localhost:${port}/parseFormula`, true);
+  xhr.open('POST', `http://localhost:${port}/parseDSeq`, true);
   xhr.setRequestHeader('Cache-Control', 'no-cache');
   xhr.setRequestHeader('Accept', 'application/json');
   xhr.setRequestHeader('Content-Type', 'application/json');
@@ -41,6 +19,30 @@ exports.postParseFormula = function(port, body, onSuccess, onError) {
       }
     }
   };
+  xhr.send(JSON.stringify(body));
+};
+
+exports.postParseFormula = function(port, body, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', `http://localhost:${port}/parseFormula`, true);
+  xhr.setRequestHeader('Cache-Control', 'no-cache');
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function () {
+    var res = null;
+    if (xhr.readyState === 4) {
+      if (xhr.status === 204 || xhr.status === 205) {
+        onSuccess();
+      } else if (xhr.status >= 200 && xhr.status < 300) {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onSuccess(res);
+      } else {
+        try { console.log(xhr.responseText); res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onError(res);
+      }
+    }
+  };
+  console.log(body)
   xhr.send(JSON.stringify(body));
 };
 
@@ -115,6 +117,28 @@ exports.postApplyCut = function(port, body, onSuccess, onError) {
 exports.getCalcDesc = function(port, onSuccess, onError) {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', `http://localhost:${port}/calcDesc`, true);
+  xhr.setRequestHeader('Cache-Control', 'no-cache');
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.onreadystatechange = function () {
+    var res = null;
+    if (xhr.readyState === 4) {
+      if (xhr.status === 204 || xhr.status === 205) {
+        onSuccess();
+      } else if (xhr.status >= 200 && xhr.status < 300) {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onSuccess(res);
+      } else {
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        if (res) onError(res);
+      }
+    }
+  };
+  xhr.send(null);
+};
+
+exports.getGetTypes = function(port, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', `http://localhost:${port}/getTypes`, true);
   xhr.setRequestHeader('Cache-Control', 'no-cache');
   xhr.setRequestHeader('Accept', 'application/json');
   xhr.onreadystatechange = function () {

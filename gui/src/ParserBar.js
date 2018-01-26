@@ -1,7 +1,7 @@
 import React, {Component} from 'react'
 import './ParserBar.css'
 import { getPort , prettyErrorMsg } from './utils.js'
-import { getParseDSeq } from './ServantApi.js'
+import { postParseDSeq } from './ServantApi.js'
 
 import KaTeXRenderer from './KaTeXRenderer.js'
 import { Input, Transition } from 'semantic-ui-react'
@@ -56,7 +56,7 @@ export default class ParserBar extends Component {
       this.setState({ parseError: "error", parseErrorData: data })
     }
     if(e.target.value)
-      getParseDSeq(getPort(), e.target.value, success, error)
+      postParseDSeq(getPort(), { text: e.target.value, opts: this.props.abbrevs }, success, error)
     else
       this.setState({ sequent: {latex: ' ', term : {}}, parseError: '' })
   }
