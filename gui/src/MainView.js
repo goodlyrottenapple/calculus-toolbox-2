@@ -373,14 +373,16 @@ export default class MainView extends Component {
           <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
           
         </div>
-        <div id="ProofTree">
-          <ProofTree macros={this.state.macros}
-                     axioms={this.state.axioms}
-                     sequent={this.state.ptSequent}
-                     saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
-                     rule=' '
-                     abbrevs={this.getAbbrevs()}
-                     ref={(node) => {this.pt = node}} />
+        <div class="scroll">
+          <div id="ProofTree">
+            <ProofTree macros={this.state.macros}
+                       axioms={this.state.axioms}
+                       sequent={this.state.ptSequent}
+                       saveSequent={(s,r) => this.setState({ptSequent: s, rule:r})} 
+                       rule=' '
+                       abbrevs={this.getAbbrevs()}
+                       ref={(node) => {this.pt = node}} />
+          </div>
         </div>
       </Sidebar.Pusher>
     </Sidebar.Pushable>)

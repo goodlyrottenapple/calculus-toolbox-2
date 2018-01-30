@@ -1,14 +1,10 @@
 ::scrollbar element {
   width:10px;
-  
 }
-
 
 ::-webkit-scrollbar {
     height: 10px;
 }
-
-
 
 .App {
   /*text-align: center;*/
@@ -75,9 +71,33 @@ div.CodeMirror-code{
   display: inline-block;
 }
 
-#ProofTree table {
-  margin: 0 auto;
+
+/*#ProofTree {
+  width: 100%;
+  background-color: cyan; 
+}*/
+
+.scroll{
+  overflow: auto;
+  width: 100%;
+  height: calc(100vh - 130px);
+  white-space:nowrap;
 }
+
+#ProofTree {
+  margin: 0 auto;
+  margin-top: 10px;
+  /*position: relative;*/
+  /*float: none;*/
+  display: table;
+  /*left: 0; right: 0;*/
+  /*background: red;*/
+  /*overflow-x: scroll;*/
+}
+/*#ProofTree > div {
+  margin: 0 auto;
+  display: inline-block;
+}*/
 
 #mainMenu {
   margin-top: 10px;

@@ -14,6 +14,7 @@ export default class ProofTree extends Component {
       latex : ''
     },
     rule: ' ',
+    multiplePremises: false,
     macros: {},
     axioms : [],
     children : []
@@ -40,7 +41,9 @@ export default class ProofTree extends Component {
     this.applyCut = this.applyCut.bind(this)  
 
     this.toggle = this.toggle.bind(this)
-    this.toJSON = this.toJSON.bind(this)  
+    this.toJSON = this.toJSON.bind(this)
+    this.termLen = this.termLen.bind(this)
+
   }
 
   componentWillReceiveProps(nextProps) {
@@ -169,34 +172,24 @@ export default class ProofTree extends Component {
     return { [r] : { conclusion: concl, premises: ps} }
   }
 
+  termLen(s) {
+
+    if(s.DSeq) return this.termLen(s.DSeq.left) + this.termLen(s.DSeq.right)
+    if(s.Con)  return 1 + s.Con.terms.map(this.termLen).reduce((a, b) => a + b, 0)
+    if(s.Lift) return this.termLen(s.Lift)
+    if(s.Base) return s.Base.length
+    if(s.Abbrev) return s.Abbrev.name.length
+
+    return -100000000000;
+  }
+
   render() {
     if(this.props.sequent.latex === '') return null;
-    // console.log(this.props.children)
-    var Pts;
-    const span = this.state.children.length;
-
-    const chMap = () => {
-      var ret = []
-
-      for (var i = 0; i < this.state.children.length; i++){
-        const child = React.cloneElement(this.state.children[i], {
-            ref: 'child-' + i
-        });
-        if(i<this.state.children.length -1) ret.push(<td key={i} className="hasRight" valign="bottom">{child}</td>)
-        else ret.push(<td key={i} valign="bottom">{child}</td>)
-      }
-      return ret;
-    }
-
-    if(span > 0) {
-      Pts = chMap() //this.state.children.map((c) => {return <td valign="bottom">{c}</td>})  
-    } else {
-      Pts = <td></td>
-    }
-
 
     const Concl = (
-      <KaTeXRenderer ref={(node) => {this.concl = node}} math={this.props.sequent.latex} macros={this.props.macros}/>
+      <span className="concl-sequent">
+        <KaTeXRenderer ref={(node) => {this.concl = node}} math={this.props.sequent.latex} macros={this.props.macros}/>
+      </span>
     )
 
     const Menu = (
@@ -269,35 +262,94 @@ export default class ProofTree extends Component {
         </div>
       </Modal>
     )
+
+    var dispCurrRuleDueToChildLength = false
+    const mkChildren = () => {
+      var ret = []
+
+      for (var i = 0; i < this.state.children.length; i++){
+        const parentL = this.termLen(this.state.sequent.term)
+        const childL = this.termLen(this.state.children[i].props.sequent.term)
+        // console.log(this.state.sequent)
+        // console.log(this.termLen(this.state.sequent.term))
+        console.log("rule: "+this.state.rule)
+        console.log(this.termLen(this.state.sequent.term))
+        // console.log("parent: "+this.state.sequent.latex.length)
+        // console.log("child: "+this.state.children[i].props.sequent.latex.length)
+        // console.log("--------------")
+        if ((this.state.children.length === 1 && childL >= parentL)
+         || (this.state.children.length > 1 && i === this.state.children.length-1))
+          ret.push(React.cloneElement(this.state.children[i], {
+            ref: 'child-' + i,
+            prevRule: this.state.rule
+          }));
+
+        else if (this.state.children.length > 1 && i < this.state.children.length-1)
+          ret.push(React.cloneElement(this.state.children[i], {
+            ref: 'child-' + i,
+            multiplePremises: true
+          }));
+        else {
+          ret.push(React.cloneElement(this.state.children[i], {
+            ref: 'child-' + i
+          }));
+          dispCurrRuleDueToChildLength = true
+        }
+          
+      }
+      return ret;
+    }
+
+    const PrevRule = () => {
+      if(this.props.prevRule) return (
+        <span className="rule-tag">
+          <KaTeXRenderer math={this.props.prevRule} macros={this.props.macros}/>
+        </span>
+      )
+      else return (<span></span>)
+    }
    
+    // this code has been copied and adapted from: https://stackoverflow.com/questions/16212364/how-do-i-display-a-proof-tree-with-html-css-and-or-javascript
     return (
-      <table>
-        <tbody>
-          <tr>
-            {Pts}
-          </tr>
-          <tr>
-            <td colSpan={span} align="center">
-              <div className="ruleBar">
-              {Menu}
-              <span className="ruleTag">
+      <div className="proof">
+        {this.state.children.length > 0 && 
+        <div className="prems">
+         {mkChildren()}
+        </div>}
+        <div className="concl">
+          <div className="concl-left"></div>
+          <div className="concl-center">
+            {Menu}
+            <div className={this.state.children.length === 0 && this.props.multiplePremises ? "rule-tags-last" : "rule-tags"}>
+              {PrevRule()}
+              {(this.state.children.length === 0 || (this.state.children.length === 1 && dispCurrRuleDueToChildLength)) && 
+              [<span className="rule-tag">
                 <KaTeXRenderer math={this.state.rule} macros={this.props.macros}/>
-              </span>
-              </div>
-              {addAboveModal}
-              {psModal}
-              <ParseTermModal 
-                visible={this.state.cutModalVisible}
-                macros={this.props.macros}
-                confirmButton="Apply Cut"
-                header={`Please supply a cut formula of type '${this.props.sequent.term.DSeq.type}'`}
-                parser={(trm, success, error) => postParseFormula(getPort(), {text: trm, opts:[this.props.sequent.term.DSeq.type, this.props.abbrevs]}, success, error)}
-                onClose={() => this.toggle('cutModalVisible')}
-                onAdd={(data) => {this.applyCut(data.term); this.toggle('cutModalVisible')}}/>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              </span>,
+              <span className="hidden-tag">
+                <KaTeXRenderer math={this.state.rule} macros={this.props.macros}/>
+              </span>]}
+              {this.props.prevRule && 
+              <span className="hidden-tag">
+                <KaTeXRenderer math={this.props.prevRule} macros={this.props.macros}/>
+              </span>}
+            </div>
+
+            {addAboveModal}
+            {psModal}
+            <ParseTermModal 
+              visible={this.state.cutModalVisible}
+              macros={this.props.macros}
+              confirmButton="Apply Cut"
+              header={`Please supply a cut formula of type '${this.props.sequent.term.DSeq.type}'`}
+              parser={(trm, success, error) => postParseFormula(getPort(), {text: trm, opts:[this.props.sequent.term.DSeq.type, this.props.abbrevs]}, success, error)}
+              onClose={() => this.toggle('cutModalVisible')}
+              onAdd={(data) => {this.applyCut(data.term); this.toggle('cutModalVisible')}}/>
+
+          </div>
+          <div className="concl-right"></div>
+        </div>
+      </div>
     )
   }
 }
