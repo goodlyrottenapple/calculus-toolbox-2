@@ -81,7 +81,7 @@ div.CodeMirror-code{
   overflow: auto;
   width: 100%;
   padding: 20px;
-  height: calc(100vh - 130px);
+  height: calc(100vh - 150px);
   white-space:nowrap;
 }
 

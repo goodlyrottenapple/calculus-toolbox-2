@@ -30,10 +30,15 @@
   overflow-y: auto;
 }
 
+
+
 #assmParseError{
   /*position: fixed;*/
-  /*right:15px;*/
-  /*bottom: 60px;*/
+  padding:15px;
+  margin-bottom: 5px;
+  background-color: rgba(255,255,255,0.9);
+  border: 1px solid #e0b4b4;
+  border-radius: .28571429rem;
   color: #db2828;
   font-family: 'Fira Code';
   -webkit-font-feature-settings: "liga" on, "calt" on;
