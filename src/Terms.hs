@@ -548,6 +548,22 @@ data AbbrevsMap a b = AbbrevsMap {
 
 type AbbrevsMapInternal = AbbrevsMap (Term 'FormulaL 'ConcreteK Text) (Term 'StructureL 'ConcreteK Text)
 
+data AbbrevError = AbbrevNotFound {
+        name ::  Text,
+        calcType :: CalcType,
+        level :: Level
+    } deriving Show
+
+instance Exception AbbrevError
+
+instance ToJSON AbbrevError where
+    toJSON AbbrevNotFound{..} = object [
+            "tag" .= ("AbbrevNotFound" :: Text),
+            "name" .= name, 
+            "type" .= toJSON calcType,
+            "level" .= toJSON level
+        ]
+
 class SubstAbbrevsTerm l where
     substAbbrevsTerm :: (MonadReader (FinTypeCalculusDescription r) m , MonadThrowJSON m) => 
         AbbrevsMapInternal -> CalcType -> Term l 'ConcreteK Text -> m (Term l 'ConcreteK Text)
@@ -570,9 +586,9 @@ substAbbrevsCon f amap c ts = do
 
 
 instance SubstAbbrevsTerm 'FormulaL where
-    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n t) = case  M.lookup (n , typ) abbrevsFormula of
+    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n _) = case M.lookup (n , typ) abbrevsFormula of
         Just t' -> return $ Abbrev n t'
-        Nothing -> return t
+        Nothing -> throw $ AbbrevNotFound n typ FormulaL -- return t
     substAbbrevsTerm amap _ (Con con@(C c) ts) = do
         ts' <- substAbbrevsCon formulaConns amap c ts
         return $ Con con ts'
@@ -580,9 +596,9 @@ instance SubstAbbrevsTerm 'FormulaL where
 
 
 instance SubstAbbrevsTerm 'StructureL where
-    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n t) = case  M.lookup (n , typ) abbrevsStructure of
+    substAbbrevsTerm AbbrevsMap{..} typ (Abbrev n _) = case M.lookup (n , typ) abbrevsStructure of
         Just t' -> return $ Abbrev n t'
-        Nothing -> return t
+        Nothing -> throw $ AbbrevNotFound n typ StructureL -- return t
     substAbbrevsTerm amap typ (Lift t) = liftM Lift $ substAbbrevsTerm amap typ t
     substAbbrevsTerm amap _ (Con con@(C c) ts) = do
         ts' <- substAbbrevsCon structureConns amap c ts

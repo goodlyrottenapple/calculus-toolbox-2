@@ -37,12 +37,11 @@ exports.postParseFormula = function(port, body, onSuccess, onError) {
         try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
         if (res) onSuccess(res);
       } else {
-        try { console.log(xhr.responseText); res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
+        try { res = JSON.parse(xhr.responseText); } catch (e) { onError(e); }
         if (res) onError(res);
       }
     }
   };
-  console.log(body)
   xhr.send(JSON.stringify(body));
 };
 

@@ -55,6 +55,8 @@ function prettyErrorMsg(e) {
       return "There are multiple definitions of '" + e.contents + "'."
     case 'SameParserSyntax':
       return "Both '" + e.contents[0] + "' and '" + e.contents[1] + "' have the same parser syntax. Please use unique parser syntax for each connective definition to avoid ambiguous parsing."
+    case 'AbbrevNotFound':
+      return `The ${e.level === 'FormulaL' ? 'formula' : 'structure'} abbreviation '${e.name}' (of type '${e.type}') was not found. Try adding the abbreviation via the sidebar first.`
     default: 
       console.log(e)
       return e.tag + " error message pretty printing has not yet been implemented. For further details, please see the console output (via View > Toggle Developer Options)"

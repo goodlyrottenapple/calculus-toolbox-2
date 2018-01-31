@@ -15,6 +15,7 @@ formulasInDSequent (DSeq l _ r) = (formulasInDSequent' l) `S.union` (formulasInD
         formulasInDSequent' (Lift x) = S.singleton x
         formulasInDSequent' (Con _ xs) = foldr (S.union . formulasInDSequent') S.empty xs
         formulasInDSequent' (Meta _) = S.empty
+        formulasInDSequent' (Abbrev _ x) = formulasInDSequent' x
 
 
 subFormulas :: Ord (Term 'FormulaL k a) => Term 'FormulaL k a -> Set (Term 'FormulaL k a)

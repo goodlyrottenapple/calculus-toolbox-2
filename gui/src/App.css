@@ -80,6 +80,7 @@ div.CodeMirror-code{
 .scroll{
   overflow: auto;
   width: 100%;
+  padding: 20px;
   height: calc(100vh - 130px);
   white-space:nowrap;
 }

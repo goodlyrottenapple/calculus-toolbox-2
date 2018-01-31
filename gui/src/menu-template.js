@@ -99,11 +99,22 @@ export default () => {
           role: 'resetzoom'
         },
         {
-          role: 'zoomin'
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+Plus',
+          click: function (item, focusedWindow) {
+            focusedWindow.send('menu:zoomIn')
+          }
         },
         {
-          role: 'zoomout'
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: function (item, focusedWindow) {
+            focusedWindow.send('menu:zoomOut')
+          }
         },
+        // {
+        //   role: 'zoomout'
+        // },
         {
           type: 'separator'
         },

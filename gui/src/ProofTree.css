@@ -1,3 +1,7 @@
+.ruleButton {
+  width: 100%;
+}
+
 /*this code has been copied and adapted from: 
 https://stackoverflow.com/questions/16212364/how-do-i-display-a-proof-tree-with-html-css-and-or-javascript*/
 
@@ -63,8 +67,8 @@ https://stackoverflow.com/questions/16212364/how-do-i-display-a-proof-tree-with-
 .rule-tags > .rule-tag:first-child {
   display: inline-block;
   /*color: red;*/
-  /*margin-left: 5px;*/
-  padding-left: 5px;
+  margin-left: -10px;
+  padding-left: 10px;
   position: absolute;
   background-color: white;
   top: 10px;
@@ -108,7 +112,7 @@ https://stackoverflow.com/questions/16212364/how-do-i-display-a-proof-tree-with-
 }
 
 .concl-right {
-  flex-grow: 1;
+  flex-grow: 5;
 }
 
 .prems > .proof:not(:first-child) > .concl > .concl-left {
@@ -133,5 +137,10 @@ https://stackoverflow.com/questions/16212364/how-do-i-display-a-proof-tree-with-
 
 .prems > .proof:not(:last-child) > .concl > .concl-center > .rule-tags-last {
   border-bottom: 1px solid black;
+  /*top: 1px;*/
   /* border-bottom-color: cyan */
+}
+
+.fix-rule-tags {
+	top: 1px;
 }

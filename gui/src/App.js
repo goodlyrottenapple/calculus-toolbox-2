@@ -11,6 +11,8 @@ export default class App extends Component {
   render() {
   	const Settings = ({ match }) => <Preferences opts={match.params.opts}/>
 
+    window.require('electron').webFrame.setVisualZoomLevelLimits(1, 1);
+
     return (
       <Switch>
         <Route path={`/edit`} component={CalcDescription}/>

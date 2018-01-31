@@ -33,7 +33,8 @@ export default class MainView extends Component {
       sidebarVisible: false,
       switchCalcVisible: false,
       addAxiomVisible: false,
-      addAbbrevsFVisible: false
+      addAbbrevsFVisible: false,
+      currentZoom: 1
     }
     // this.toggleCalcDesc = this.toggleCalcDesc.bind(this)  
     this.reloadMacros = this.reloadMacros.bind(this)  
@@ -119,6 +120,21 @@ export default class MainView extends Component {
     ipcRenderer.on('menu:prefs', e => {
       this.openPrefs();
     })
+
+    ipcRenderer.on('menu:zoomIn', e => {
+      console.log("zoom In")
+      this.setState({
+        currentZoom: this.state.currentZoom + 0.05 < 2 ? 
+          this.state.currentZoom + 0.05 : this.state.currentZoom
+      })
+    })
+
+    ipcRenderer.on('menu:zoomOut', e => {
+      this.setState({
+        currentZoom: this.state.currentZoom - 0.05 > 0.2 ? 
+          this.state.currentZoom - 0.05 : this.state.currentZoom
+      })
+    })
   }
 
 
@@ -139,11 +155,11 @@ export default class MainView extends Component {
       }
       const session = JSON.parse(data.toString())
 
-      this.mkPT(session.pt)
       if(session.version > 1) {
         console.log(session);
         this.setState({axioms: session.axioms, abbrevs: session.abbrevs})
       }
+      this.mkPT(session.pt)
     });
   }
 
@@ -373,8 +389,8 @@ export default class MainView extends Component {
           <Button style={{float:'right', margin:'10px'}} basic circular icon='setting' onClick={() => this.toggle('sidebarVisible')} />
           
         </div>
-        <div class="scroll">
-          <div id="ProofTree">
+        <div className="scroll">
+          <div id="ProofTree" style={{zoom: this.state.currentZoom}}>
             <ProofTree macros={this.state.macros}
                        axioms={this.state.axioms}
                        sequent={this.state.ptSequent}

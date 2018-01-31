@@ -427,10 +427,11 @@ instance TermGrammar 'StructureL 'ConcreteK where
         lookupS <- lookupH structureConns
 
         -- reservedAbbrevs <- mixfixPartsAbbrevs
-        abbrev      <- lift $ rule $ (\n -> Abbrev (toS n) (Lift $ Lift $ Base $ toS n)) <$> (namedToken "{{" *> satisfy (\_ -> True) <* (namedToken "}}" <|> namedToken "}}s"))
+        abbrev      <- lift $ rule $ (\n -> Abbrev (toS n) (Lift $ Lift $ Base $ toS n)) <$> (namedToken "{{" *> satisfy (\_ -> True) <* namedToken "}}s")
+        abbrevF     <- lift $ rule $ (\n -> Lift $ Abbrev (toS n) (Lift $ Base $ toS n)) <$> (namedToken "{{" *> satisfy (\_ -> True) <* (namedToken "}}" <|> namedToken "}}f"))
 
         exprF   <- grammarTerm
-        atomS   <- lift $ rule $ abbrev <|> Lift <$> exprF
+        atomS   <- lift $ rule $ abbrevF <|> abbrev <|> Lift <$> exprF
                     <|> namedToken "(" *> exprS <* namedToken ")"
         exprS   <- lift $ mixfixExpression tableS atomS (mkCon lookupS)
         return exprS

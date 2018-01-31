@@ -68,7 +68,11 @@ export default class ParserBar extends Component {
           {this.state.parseError === '' && <KaTeXRenderer id="Rendered" math={this.state.sequent.latex} macros={this.props.macros}/>}
           {this.state.parseError === 'error' && <div id="parseError">{prettyErrorMsg(this.state.parseErrorData)}</div>}
         </Transition.Group>
-        <Input className={this.state.parseError} onKeyUp={this.parseSequent} onClick={this.caretPos} onSelect={this.caretPos}></Input>
+        <Input className={this.state.parseError} 
+               onKeyUp={this.parseSequent} 
+               onClick={this.caretPos} 
+               onSelect={this.caretPos}
+               placeholder='Type in a sequent and press Enter to create a new proof tree...'></Input>
         <div className='CaretPos'>({this.state.caretStart},{this.state.caretEnd})</div>
       </div>
     )

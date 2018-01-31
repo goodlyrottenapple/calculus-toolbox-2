@@ -47,7 +47,7 @@ export default class ProofTree extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
-    if (nextProps.sequent !== this.props.sequent)
+    if (nextProps.sequent !== this.state.sequent)
       this.setState({
         sequent: nextProps.sequent, 
         rule: nextProps.rule,
@@ -81,7 +81,7 @@ export default class ProofTree extends Component {
       this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
-    postApplicableRules(getPort(), this.props.sequent.term, success, error)
+    postApplicableRules(getPort(), this.state.sequent.term, success, error)
   }
 
   runPS() {
@@ -95,7 +95,7 @@ export default class ProofTree extends Component {
     // 15 is the proof depth parameter
     console.log("port: " + getPort())
     console.log("axioms: " + this.props.axioms)
-    postLaunchPS(getPort(), [15,this.props.axioms.map((a) => a.term),this.props.sequent.term], success, error)
+    postLaunchPS(getPort(), [15,this.props.axioms.map((a) => a.term),this.state.sequent.term], success, error)
   }
 
   pollPS() {
@@ -118,7 +118,7 @@ export default class ProofTree extends Component {
   }
 
   applyCut(formula) {
-    console.log(this.props.sequent)
+    console.log(this.state.sequent)
     const success = (data) => {
       // this.setState({possibleRules: data })
       console.log(data)
@@ -126,7 +126,7 @@ export default class ProofTree extends Component {
       // this.toggle('addingRules')
     }
     const error = (data) => console.log(data)
-    postApplyCut(getPort(), [this.props.sequent.term , formula], success, error)
+    postApplyCut(getPort(), [this.state.sequent.term , formula], success, error)
   }
 
   appendPT(pt) {
@@ -184,11 +184,11 @@ export default class ProofTree extends Component {
   }
 
   render() {
-    if(this.props.sequent.latex === '') return null;
+    if(this.state.sequent.latex === '') return null;
 
     const Concl = (
       <span className="concl-sequent">
-        <KaTeXRenderer ref={(node) => {this.concl = node}} math={this.props.sequent.latex} macros={this.props.macros}/>
+        <KaTeXRenderer ref={(node) => {this.concl = node}} math={this.state.sequent.latex} macros={this.props.macros}/>
       </span>
     )
 
@@ -236,7 +236,11 @@ export default class ProofTree extends Component {
 
     const addAboveModal =(
       <Modal dimmer={'blurring'} open={this.state.addingRules}>
-        <Modal.Header>Select a Rule To Apply</Modal.Header>
+        <Modal.Header>Select a Rule To Apply to: 
+          <span style={{fontSize: '14px'}}>
+            <KaTeXRenderer math={this.state.sequent.latex} macros={this.props.macros}/>
+          </span>
+        </Modal.Header>
         <Modal.Content>
           <Modal.Description>
             <List style={{width:"100%"}}>
@@ -284,18 +288,21 @@ export default class ProofTree extends Component {
             prevRule: this.state.rule
           }));
 
-        else if (this.state.children.length > 1 && i < this.state.children.length-1)
+        else if (this.state.children.length > 1 && i < this.state.children.length-1) {
           ret.push(React.cloneElement(this.state.children[i], {
             ref: 'child-' + i,
             multiplePremises: true
           }));
+          ret.push(<div className="inter-proof"></div>)
+        }
         else {
           ret.push(React.cloneElement(this.state.children[i], {
             ref: 'child-' + i
           }));
           dispCurrRuleDueToChildLength = true
         }
-          
+
+
       }
       return ret;
     }
@@ -320,13 +327,13 @@ export default class ProofTree extends Component {
           <div className="concl-left"></div>
           <div className="concl-center">
             {Menu}
-            <div className={this.state.children.length === 0 && this.props.multiplePremises ? "rule-tags-last" : "rule-tags"}>
+            <div className={`${this.state.children.length === 0 && this.props.multiplePremises ? "rule-tags-last" : "rule-tags"} ${this.state.children.length === 0 && this.props.multiplePremises && this.state.rule === ' ' ? "fix-rule-tags" : ""}`}>
               {PrevRule()}
               {(this.state.children.length === 0 || (this.state.children.length === 1 && dispCurrRuleDueToChildLength)) && 
-              [<span className="rule-tag">
+              [<span className="rule-tag" key="0">
                 <KaTeXRenderer math={this.state.rule} macros={this.props.macros}/>
               </span>,
-              <span className="hidden-tag">
+              <span className="hidden-tag" key="1">
                 <KaTeXRenderer math={this.state.rule} macros={this.props.macros}/>
               </span>]}
               {this.props.prevRule && 
@@ -341,8 +348,8 @@ export default class ProofTree extends Component {
               visible={this.state.cutModalVisible}
               macros={this.props.macros}
               confirmButton="Apply Cut"
-              header={`Please supply a cut formula of type '${this.props.sequent.term.DSeq.type}'`}
-              parser={(trm, success, error) => postParseFormula(getPort(), {text: trm, opts:[this.props.sequent.term.DSeq.type, this.props.abbrevs]}, success, error)}
+              header={`Please supply a cut formula of type '${this.state.sequent.term.DSeq.type}'`}
+              parser={(trm, success, error) => postParseFormula(getPort(), {text: trm, opts:[this.state.sequent.term.DSeq.type, this.props.abbrevs]}, success, error)}
               onClose={() => this.toggle('cutModalVisible')}
               onAdd={(data) => {this.applyCut(data.term); this.toggle('cutModalVisible')}}/>
 
