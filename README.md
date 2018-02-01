@@ -1,5 +1,6 @@
 # calculus-toolbox-2
-This is the new, much improved version of the original [calculus-toolbox](https://github.com/goodlyrottenapple/calculus-toolbox). The new version isn't quite feature ready, but contains most of the functionality of the original UI tool, whilst greatly simplifying the compilation of new calculi. The new tool can load and modify display calculi at runtime, with no need for re-compilation.
+This is the new, much improved version of the original [calculus-toolbox](https://github.com/goodlyrottenapple/calculus-toolbox). The new version isn't quite feature ready, but contains most of the functionality of the original UI tool, whilst greatly simplifying the compilation of new calculi. Unlike the old toolbox, the new one also offers support for (finitary?) multitype display calculi, as discussed in the following [paper](http://www.cs.le.ac.uk/people/ak155/Papers/multi-type-deak.pdf).   
+The new tool can load and modify display calculi at runtime, with no need for re-compilation.
 
 ## Download and Installation 
 To get started, please download the [alpha version](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases) for your operating system. For Windows users, when launching the toolbox for the first time, please enable the two firewall windows that pop up.
@@ -101,6 +102,35 @@ X , Y |- A /\ B
 
 ### Parser whitespace
 Since the parser admits mixfix notation, whitespace is important. Namely, the parser will not usually be able to parse `a/\b` or `[ag1]b` correctly, as the tokenizer will treat `a/\b` as a full variable name (this is similar behaviour to Agda). Instead, one has to write `a /\ b` and `[ ag1 ] b`, for the intended parse.
+
+### Abbreviations
+You can now add formula abbreviations inside the tool, to make working with sequents containing long formulas simpler. Abbreviations hide the defined formula behind a user given label. For example, the following sequent, containing abbreviation (highlighed in green)
+
+![abbrev](https://user-images.githubusercontent.com/10553895/35685320-47bb2dc8-0761-11e8-94ad-6602069f5fa9.jpeg)
+
+was partially expanded to:
+
+![abbrev_part_expanded](https://user-images.githubusercontent.com/10553895/35685315-452543be-0761-11e8-8af5-5a8bd91dc08b.jpeg)
+
+Leading to a rather long formula, which is not very readable.
+
+To add an abbreviation, open the sidebar (the cog wheel icon in top right corner) and click on ‘Add a formula abbreviation’. Since the tool supports multiple types for the sequents, the first dropdown will ask you to select the type of the formula you want to define.
+
+The syntax for parsing an abbreviation in the bottom bar (or when adding another abbreviation, as abbreviations can be nested) is the following:
+
+If you declare an abbreviation of type `Fm`, called `D_1`, where, say, the formula is ![C_1 -> 0](https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg) you can tell the parser to parse D_1 as an abbreviation by putting it in double curly braces:
+
+```
+{{D_1}} |- C_1 -> 0
+```
+
+This will be different from:
+
+```
+D_1 |- C_1 -> 0
+```
+
+As the former one will substitute `{{D_1}}` with an abbreviation called D_1 which hides the formula ![C_1 -> 0](https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg).
 
 ### Sample calculus description file
 If you want to test the functionality of the tool without having to define a display calculus from scratch, try downloading the display version of the [classical LK sequent calculus](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases/download/v0.1.0-alpha/DispLK.zip). Extract the archive and place `DispLK.calc` and `DispLK.rules` into the working directory you chose in the initial setup window.
