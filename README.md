@@ -118,7 +118,7 @@ To add an abbreviation, open the sidebar (the cog wheel icon in top right corner
 
 The syntax for parsing an abbreviation in the bottom bar (or when adding another abbreviation, as abbreviations can be nested) is the following:
 
-If you declare an abbreviation of type `Fm`, called `D_1`, where, say, the formula is ![C_1 -> 0](https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg) you can tell the parser to parse D_1 as an abbreviation by putting it in double curly braces:
+If you declare an abbreviation of type `Fm`, called `D_1`, where, say, the formula is <img src="https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg" height="25"> you can tell the parser to parse `D_1` as an abbreviation by putting it in double curly braces:
 
 ```
 {{D_1}} |- C_1 -> 0
@@ -130,7 +130,7 @@ This will be different from:
 D_1 |- C_1 -> 0
 ```
 
-As the former one will substitute `{{D_1}}` with an abbreviation called D_1 which hides the formula ![C_1 -> 0](https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg).
+As the former will substitute `{{D_1}}` with an abbreviation `D_1` which hides the formula <img src="https://user-images.githubusercontent.com/10553895/35685549-f09692e8-0761-11e8-86ba-d60fe62dddf1.jpeg" height="25">.
 
 ### Sample calculus description file
 If you want to test the functionality of the tool without having to define a display calculus from scratch, try downloading the display version of the [classical LK sequent calculus](https://github.com/goodlyrottenapple/calculus-toolbox-2/releases/download/v0.1.0-alpha/DispLK.zip). Extract the archive and place `DispLK.calc` and `DispLK.rules` into the working directory you chose in the initial setup window.
