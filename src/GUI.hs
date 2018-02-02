@@ -59,11 +59,12 @@ data ParseTerm o = ParseTerm {
     opts :: o
 } deriving (Generic, FromJSON)
 
-type API = "parseDSeq" :> ReqBody '[JSON] (ParseTerm AbbrevsMapInternal) :>  Post '[JSON] (LatexDSeq [Rule Text] 'ConcreteK)
-      :<|> "parseFormula" :> ReqBody '[JSON] (ParseTerm (CalcType, AbbrevsMapInternal)) :> Post '[JSON] (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text))
+type API = "parseDSeq" :> ReqBody '[JSON] (ParseTerm AbbrevsMapInternal) :>  Post '[JSON] (LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK)
+      :<|> "parseFormula" :> ReqBody '[JSON] (ParseTerm (CalcType, AbbrevsMapInternal)) :> Post '[JSON] (LatexTerm (FinTypeCalculusDescription [Rule Text]) (Term 'FormulaL 'ConcreteK Text))
       :<|> "macros" :> Get '[JSON] Macros
-      :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
-      :<|> "applyCut" :> ReqBody '[JSON] (DSequent 'ConcreteK Text, Term 'FormulaL 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+      :<|> "applicableRules" :> ReqBody '[JSON] (DSequent 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK])]
+      :<|> "applyCut" :> ReqBody '[JSON] (DSequent 'ConcreteK Text, Term 'FormulaL 'ConcreteK Text) :> Post '[JSON] [(RuleName , [LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK])]
+      :<|> "exportPTtoLatex" :> ReqBody '[JSON] (PT (LatexDSeq () 'ConcreteK)) :> Post '[JSON] Text
       :<|> CalculusDescriptionAPI
       :<|> ProofSearchAPI
 
@@ -80,7 +81,7 @@ data CalDescStore c = CalDescStore {
 
 
 type PTDSeq = PT (DSequent 'ConcreteK Text)
-type LatexPTDSeq = PT (LatexDSeq [Rule Text] 'ConcreteK)
+type PTLatexDSeq = PT (LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK)
 
 
 type AbbrevsMapLatex = AbbrevsMap (LatexTerm [Rule Text] (Term 'FormulaL 'ConcreteK Text)) (LatexTerm [Rule Text] (Term 'StructureL 'ConcreteK Text))
@@ -215,7 +216,7 @@ instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
     throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
 
 
-parseDSeqH :: ParseTerm AbbrevsMapInternal -> AppM r (LatexDSeq r 'ConcreteK)
+parseDSeqH :: ParseTerm AbbrevsMapInternal -> AppM r (LatexDSeq (FinTypeCalculusDescription r) 'ConcreteK)
 parseDSeqH ParseTerm{..} = freeze $ do
     -- print $ tokenize $ toS text
     r <- parseCDSeq opts text
@@ -224,7 +225,7 @@ parseDSeqH ParseTerm{..} = freeze $ do
 -- parseDSeqH Nothing = throwIO $ err300 {errBody = "No input given"} -- redo this properly??
 
 
-parseFormulaH :: ParseTerm (CalcType, AbbrevsMapInternal) -> AppM r (LatexTerm r (Term 'FormulaL 'ConcreteK Text))
+parseFormulaH :: ParseTerm (CalcType, AbbrevsMapInternal) -> AppM r (LatexTerm (FinTypeCalculusDescription  r) (Term 'FormulaL 'ConcreteK Text))
 parseFormulaH ParseTerm{..} = freeze $ do
     r <- parseFormula opts text
     cd <- ask
@@ -236,13 +237,13 @@ getMacrosH = freeze $ do
     fconns <- asks formulaConns
     sconns <- asks structureConns
     ms <- asks macros
-    return $ Macros $ ms `M.union` (M.fromList $
+    return $ Macros $ (M.map snd ms) `M.union` (M.fromList $
         (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) fconns) ++
         (map (\(ConnDescription n _ _ _ _ _ l) -> ("\\seq" <> n, l)) sconns))
 
 
 
-getApplicableRulesH :: DSequent 'ConcreteK Text -> AppM [Rule Text] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+getApplicableRulesH :: DSequent 'ConcreteK Text -> AppM [Rule Text] [(RuleName , [LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK])]
 getApplicableRulesH dseq = freeze $ do
     cd <- ask
     -- print cd
@@ -251,7 +252,7 @@ getApplicableRulesH dseq = freeze $ do
     return $ M.toList $ (M.map . map) (\s -> LatexTerm (cd,s)) r
 
 
-applyCutH :: (DSequent 'ConcreteK Text , Term 'FormulaL 'ConcreteK Text) -> AppM [Rule Text] [(RuleName , [LatexDSeq [Rule Text] 'ConcreteK])]
+applyCutH :: (DSequent 'ConcreteK Text , Term 'FormulaL 'ConcreteK Text) -> AppM [Rule Text] [(RuleName , [LatexDSeq (FinTypeCalculusDescription [Rule Text]) 'ConcreteK])]
 applyCutH (dseq@(DSeq _ typ _) , cutFormula) = freeze $ do
     cd <- ask
     let (Rule _ (Just latexName) premises conclusion) = cutRule typ
@@ -264,6 +265,14 @@ applyCutH (dseq@(DSeq _ typ _) , cutFormula) = freeze $ do
         _ -> return []
     -- -- print r
     -- return $ M.toList $ (M.map . map) (\s -> LatexDSeq (cd,s)) r
+
+
+
+exportPTtoLatexH :: PT (LatexDSeq () 'ConcreteK) -> AppM r Text
+exportPTtoLatexH pt = freeze $ do
+    pretty <- pprint (map (snd . unMk) pt)
+    print pretty
+    return pretty
 
 
 type CalculusDescriptionAPI = "calcDesc"    :> Get '[JSON] CalcDesc
@@ -351,7 +360,7 @@ serverCalcDesc = caclDescH :<|> getTypesH :<|> modifyCalcH :<|> deleteCalcH :<|>
 
 type ProofSearchAPI = "launchPS"      :> ReqBody '[JSON] (Int, Set (DSequent 'ConcreteK Text) , DSequent 'ConcreteK Text) :> Post '[JSON] Int
                  :<|> "cancelPS"      :> ReqBody '[JSON] Int :> Post '[JSON] ()
-                 :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] [LatexPTDSeq]
+                 :<|> "queryPSResult" :> ReqBody '[JSON] Int :> Post '[JSON] [PTLatexDSeq]
 
 
 launchPSH :: (Int, Set (DSequent 'ConcreteK Text), DSequent 'ConcreteK Text) -> AppM [Rule Text] Int
@@ -360,7 +369,7 @@ launchPSH (maxDepth, assms, dseq) = runPS maxDepth assms dseq
 cancelPSH :: Int -> AppM [Rule Text] ()
 cancelPSH = cancelPS
 
-queryPSResultH :: Int -> AppM [Rule Text] [LatexPTDSeq]
+queryPSResultH :: Int -> AppM [Rule Text] [PTLatexDSeq]
 queryPSResultH i = do
     r <- tryDequeue i
     case r of
@@ -382,7 +391,7 @@ readerServer :: Config [Rule Text] -> Server API
 readerServer cfg = enter (ioToHandler cfg) server
 
 server :: ServerT API (AppM [Rule Text])
-server = parseDSeqH :<|> parseFormulaH :<|> getMacrosH :<|> getApplicableRulesH :<|> applyCutH :<|> serverCalcDesc :<|> serverPS
+server = parseDSeqH :<|> parseFormulaH :<|> getMacrosH :<|> getApplicableRulesH :<|> applyCutH :<|> exportPTtoLatexH :<|> serverCalcDesc :<|> serverPS
 
 myCors :: Middleware
 myCors = cors $ const $ Just customPolicy

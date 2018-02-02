@@ -162,7 +162,7 @@ data FinTypeCalculusDescription r = Description {
   , formulaConns   :: [ConnDescription 'FormulaL]
   , structureConns :: [ConnDescription 'StructureL]
   , rules          :: r
-  , macros         :: Map Text Text
+  , macros         :: Map Text (Int,Text)
 } deriving Show
 
 
@@ -357,7 +357,7 @@ connMap f = do
     fConns <- asks f
     return $ M.fromList $ map (\c@ConnDescription{..} -> (name, c)) fConns
 
-connMap' :: forall l r m. (Monad m, SingI l) => CalcMT r m (Map Text (ConnDescription l))
+connMap' :: forall l r m. (MonadReader (FinTypeCalculusDescription r) m, SingI l) => m (Map Text (ConnDescription l))
 connMap' = connMap'' (fromSing (sing :: Sing l))
     where
         connMap'' AtomL = return M.empty

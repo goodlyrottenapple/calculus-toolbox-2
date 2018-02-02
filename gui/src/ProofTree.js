@@ -1,7 +1,7 @@
 import React, {Component} from 'react'
 import KaTeXRenderer from './KaTeXRenderer.js'
 import './ProofTree.css'
-import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQueryPSResult, postParseFormula } from './ServantApi.js'
+import { postApplicableRules, postApplyCut, postLaunchPS, postCancelPS, postQueryPSResult, postParseFormula, postExportPTtoLatex } from './ServantApi.js'
 import { getPort } from './utils.js'
 import ParseTermModal from './ParseTermModal.js'
 

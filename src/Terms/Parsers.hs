@@ -21,7 +21,7 @@ module Terms.Parsers where
 import           Lib.Prelude
 import qualified Prelude            as P
 import           Terms
-import           Rules.CutElimConditions
+-- import           Rules.CutElimConditions
 -- import Data.Singletons.TH
 -- import GHC.TypeLits(SomeNat(..))
 import           Data.Singletons
@@ -213,7 +213,8 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
 deriving instance Exception CalculusDescParseError
 
 applyPragma :: MonadThrowJSON m => FinTypeCalculusDescription a -> ([Char] , [Text]) -> m (FinTypeCalculusDescription a)
-applyPragma d@Description{..} ("MACRO" , [name, defn]) = return d{macros = M.insert ("\\" <> name) defn macros}
+applyPragma d@Description{..} ("MACRO" , [name, defn]) = return d{macros = M.insert ("\\" <> name) (0, defn) macros}
+applyPragma d@Description{..} ("MACRO" , [name, noOfArgs, defn]) | Just n <- readMaybe (toS noOfArgs) = return d{macros = M.insert ("\\" <> name) (n,defn) macros}
 -- applyPragma d                 ('-':'-':_ , _) = return d -- a comment pragma
 applyPragma _ (n, args) = throw $ InvalidPragma n args
 
@@ -240,10 +241,10 @@ mkFinTypeCalculusDescription ps = do
 
     where
         macros = M.fromList [
-                ("\\abbrevColor" , "#21ba45"), 
-                ("\\turnstileColor" , "#f2711c"), 
-                ("\\seqabbrev" , "{\\color{\\abbrevColor}{#1}}"), 
-                ("\\seqturnstile", "\\,\\,{\\color{\\turnstileColor}\\vdash}\\,\\,")
+                ("\\abbrevColor" , (0,"#21ba45")), 
+                ("\\turnstileColor" , (0,"#f2711c")), 
+                ("\\seqabbrev" , (1,"{\\color{\\abbrevColor}{#1}}")), 
+                ("\\seqturnstile", (0, "\\,\\,{\\color{\\turnstileColor}\\vdash}\\,\\,"))
             ]
         -- getPragmas prs = 
         --     let 
@@ -541,10 +542,10 @@ parseRules str = parse $ (filter (\(_ , tokens) -> tokens /= []) . map (\x -> (x
                         [p] -> return p
                         ps' -> throw $ AmbiguousRuleParse ps'
 
-            checkCondition 1 conditionC1 r'
+            -- checkCondition 1 conditionC1 r'
             rs' <- parse rs
             return $ r':rs'
 
-        checkCondition n cFun r = 
-            if (not $ cFun r) then throw $ CutElimConditionViolated n r else return ()
+        -- checkCondition n cFun r = 
+        --     if (not $ cFun r) then throw $ CutElimConditionViolated n r else return ()
 

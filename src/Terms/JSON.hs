@@ -32,6 +32,7 @@ import           Data.Aeson
 import           Data.Singletons
 import           Lib.Prelude
 import           Terms
+import Rules
 -- import qualified Prelude as P
 -- import Data.Singletons.TH
 -- import GHC.TypeLits
@@ -40,15 +41,21 @@ import qualified Data.Text          as T
 
 import           Text.Earley.Mixfix (Associativity (..))
 
-newtype LatexTerm r t = LatexTerm { unMk :: (FinTypeCalculusDescription r, t) }
+newtype LatexTerm r t = LatexTerm { unMk :: (r, t) }
 
 type LatexDSeq r k = LatexTerm r (DSequent k Text)
 
-instance (PPrint t , ToJSON t) => ToJSON (LatexTerm r t) where
+instance (PPrint t , ToJSON t) => ToJSON (LatexTerm (FinTypeCalculusDescription r) t) where
     toJSON (LatexTerm (d, t)) = object [
             "latex" .= (toJSON $ runReader (pprint t) d) -- <> " \\vdash " <> pprint r) ,
           , "term" .= toJSON t
         ]
+
+
+instance (FromJSON t) => FromJSON (LatexTerm () t) where
+    parseJSON = withObject "latex term" $ \o -> do
+            trm <- o .: "term"
+            return $ LatexTerm ((), trm)
 
 
 getLevelT :: forall l k a. SingI l => Term l k a -> Level
@@ -56,7 +63,7 @@ getLevelT _ = fromSing (sing :: Sing l)
 
 
 
-getBinding :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Int
+getBinding :: forall l k a r m. MonadReader (FinTypeCalculusDescription r) m => Term l k a -> m Int
 getBinding (Base _) = return (maxBound :: Int)
 getBinding (Meta _) = return (maxBound :: Int)
 getBinding (Abbrev _ _) = return (maxBound :: Int)
@@ -67,7 +74,7 @@ getBinding (Con (C c) _) = do
     return binding
 
 
-getAssoc :: forall l k a r m. Monad m => Term l k a -> CalcMT r m Text.Earley.Mixfix.Associativity
+getAssoc :: forall l k a r m. MonadReader (FinTypeCalculusDescription r) m => Term l k a -> m Text.Earley.Mixfix.Associativity
 getAssoc (Base _) = return NonAssoc
 getAssoc (Meta _) = return NonAssoc
 getAssoc (Abbrev _ _) = return NonAssoc
@@ -79,7 +86,7 @@ getAssoc (Con (C c) _) = do
 
 
 class PPrint a where
-    pprint :: Monad m => a -> CalcMT r m Text
+    pprint :: MonadReader (FinTypeCalculusDescription r) m => a -> m Text
 
 
 instance PPrint Level where
@@ -112,7 +119,7 @@ instance PPrint a => PPrint (Term l k a) where
         ass <- getAssoc trm
         pprint' con bnd ass $ toList vs
         where
-            pprint' :: Monad m => Text -> Int -> Text.Earley.Mixfix.Associativity -> [Term l k a] -> CalcMT r m Text
+            pprint' :: MonadReader (FinTypeCalculusDescription r) m => Text -> Int -> Text.Earley.Mixfix.Associativity -> [Term l k a] -> m Text
             pprint' c _ _ [] =  return $ "\\seq" <> c
             pprint' c bind _ [x] = do
                 px <- pprint x
@@ -149,6 +156,27 @@ instance PPrint a => PPrint (Term l k a) where
 
 newtype Macros = Macros (Map Text Text) deriving (Generic, ToJSON)
 
+
+instance PPrint a => PPrint (PT a) where
+    pprint pt = do
+        macros <- pprintMacros 
+        -- prettypt <- pprintPT pt
+        return $ macros <> "\n\n\n" -- <> prettypt
+
+        where
+            pprintMacro name (0,def) rest = "\\newcommand{" <> name <> "}{" <> def <> "}\n" <> rest
+            pprintMacro name (n,def) rest = "\\newcommand{" <> name <> "}[" <> show n <> "]{" <> def <> "}\n" <> rest
+  
+            pprintMacros :: MonadReader (FinTypeCalculusDescription r) m => m Text
+            pprintMacros = do
+                macros <- asks macros
+                fconns <- asks formulaConns
+                sconns <- asks structureConns
+                let macros' = 
+                        macros `M.union` (M.fromList $
+                        (map (\(ConnDescription n inTs _ _ _ _ l) -> ("\\seq" <> n, (length inTs, l))) fconns) ++
+                        (map (\(ConnDescription n inTs _ _ _ _ l) -> ("\\seq" <> n, (length inTs, l))) fconns))
+                return $ M.foldrWithKey pprintMacro "" macros'
 
 data CalcDesc = CalcDesc {
     name     :: Text

@@ -12,6 +12,7 @@ For more information on how to write Haddock comments check the user guide:
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE PatternSynonyms       #-}
 
 module Rules where
 
@@ -25,17 +26,31 @@ import qualified Data.Set            as S
 import qualified Prelude             as P
 
 
+data PTError = InvalidRuleApplication deriving (Show, Generic, ToJSON, FromJSON)
+
 data PT a = PT {
     premises   :: [PT a]
   , name       :: Text
   , conclusion :: a
+  , error :: Maybe PTError
 } deriving (Show, Functor)
 
+
+pattern PTValid :: [PT a] -> Text -> a -> PT a
+pattern PTValid p n c = PT p n c Nothing
+
 instance ToJSON a => ToJSON (PT a) where
-    toJSON (PT xs r c) = object [
+    toJSON (PT xs r c Nothing) = object [
         r .= object [
                 "premises" .= toJSON xs,
                 "conclusion" .= toJSON c
+            ]
+        ]
+    toJSON (PT xs r c (Just e)) = object [
+        r .= object [
+                "premises" .= toJSON xs,
+                "conclusion" .= toJSON c,
+                "error" .= toJSON e
             ]
         ]
 
@@ -46,7 +61,8 @@ instance FromJSON a => FromJSON (PT a) where
                 pt <- (.:) @(HM.HashMap Text Value) o r
                 ps <- pt .: "premises"
                 c <- pt .: "conclusion"
-                return $ PT ps r c
+                e <- pt .:? "error"
+                return $ PT ps r c e
             _ -> P.fail "Invalid proof tree"
 
 
@@ -150,7 +166,7 @@ cutRule typ@(Type t) = Rule{..}
 findProof' :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
     Int -> Set (DSequent 'ConcreteK b) -> DSequent 'ConcreteK b -> m [PT (DSequent 'ConcreteK b)]
 findProof' 0 _ _ = return []
-findProof' n prems s = if s `S.member` prems then return [PT [] "Axiom" s] else do
+findProof' n prems s = if s `S.member` prems then return [PTValid [] "Axiom" s] else do
     appM <- getApplicableRules s
     aux1 s $ M.toList appM
 
@@ -165,11 +181,11 @@ findProof' n prems s = if s `S.member` prems then return [PT [] "Axiom" s] else 
 
         -- aux :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
         --     DSequent 'ConcreteK b -> RuleName -> [DSequent 'ConcreteK b] -> m [PT (DSequent 'ConcreteK b)]
-        aux c nm [] = return $ [PT [] nm c]
+        aux c nm [] = return $ [PTValid [] nm c]
         aux c nm (p:ps) = do
             pPts <- findProof' (n-1) prems p
             psPts <- aux c nm ps
-            return $ concat $ map (\p' -> map (\(PT ps' nm' c') -> PT (p':ps') nm' c') psPts) pPts
+            return $ concat $ map (\p' -> map (\(PT ps' nm' c' e) -> PT (p':ps') nm' c' e) psPts) pPts
 
 
 findProof :: (MonadReader (FinTypeCalculusDescription [Rule Text]) m, MonadThrowJSON m, Ord b) =>
