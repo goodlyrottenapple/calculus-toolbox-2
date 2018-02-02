@@ -158,7 +158,7 @@ newtype Macros = Macros (Map Text Text) deriving (Generic, ToJSON)
 
 
 instance PPrint a => PPrint (PT a) where
-    pprint pt = do
+    pprint _ = do
         macros <- pprintMacros 
         -- prettypt <- pprintPT pt
         return $ macros <> "\n\n\n" -- <> prettypt
@@ -175,7 +175,7 @@ instance PPrint a => PPrint (PT a) where
                 let macros' = 
                         macros `M.union` (M.fromList $
                         (map (\(ConnDescription n inTs _ _ _ _ l) -> ("\\seq" <> n, (length inTs, l))) fconns) ++
-                        (map (\(ConnDescription n inTs _ _ _ _ l) -> ("\\seq" <> n, (length inTs, l))) fconns))
+                        (map (\(ConnDescription n inTs _ _ _ _ l) -> ("\\seq" <> n, (length inTs, l))) sconns))
                 return $ M.foldrWithKey pprintMacro "" macros'
 
 data CalcDesc = CalcDesc {
