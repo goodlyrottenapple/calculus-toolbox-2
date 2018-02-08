@@ -26,6 +26,7 @@ library
                      , Terms.Parsers
                      , Terms.JSON
                      , GUI
+                     --, DepTerms
   other-modules:       Lib.Prelude
                      , Servant.JS.Custom
   build-depends:       base >= 4.7 && < 5

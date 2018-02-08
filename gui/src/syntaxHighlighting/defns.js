@@ -181,7 +181,7 @@ CodeMirror.defineMode("calcDefns", function(_config, modeConfig) {
     }
 
     setType("keyword")(
-      "default", "type", "_", );
+      "default", "type", "_", "import");
 
     setType("keyword")(
       "\.\.", ":", "::", "->", "{" , "}", "#");

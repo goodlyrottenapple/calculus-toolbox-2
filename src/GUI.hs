@@ -33,6 +33,7 @@ import           Terms.Parsers
 import           Data.IntMap.Strict          (IntMap)
 import qualified Data.IntMap.Strict          as IntMap
 import qualified Data.Map                    as M
+import qualified Data.Set                    as S
 
 -- import qualified Data.Text as T
 import Control.Monad.Except
@@ -47,6 +48,7 @@ import System.Directory(listDirectory, removeFile, doesFileExist)
 data GUIError = CalculusDescriptionNotLoaded
               | InvalidName Text
               | FileDoesNotExist FilePath
+              | CircularImport (Set Text)
               -- | TermParseE TermParseError
               | Custom Text deriving (Show, Generic, ToJSON)
 
@@ -297,16 +299,14 @@ getTypesH = do
 modifyCalcH :: CalcDesc -> AppM [Rule Text] ()
 modifyCalcH CalcDesc{..} = do
     when (name == "") $ throw $ InvalidName name
-    cd <- parseFinTypeCalculusDescription rawCalc
-
-    print $ (filter (\(_ , tokens) -> tokens /= []) . map (\x -> (x , tokenize x)) . splitRules . toS) rawRules
-
-    rules <- runReaderT (parseRules rawRules) cd
-    -- print rules
-    put (name , CalDescStore cd{rules = rules} rawCalc rawRules)
-    -- write the calc to a file
     cFolder <- asks calcFolder
-    print cFolder
+    cd <- loadCalcRec cFolder (S.singleton name) rawCalc rawRules
+    -- rules <- runReaderT (parseRules rawRules) cd
+    print cd
+    put (name , CalDescStore cd rawCalc rawRules)
+    -- write the calc to a file
+    -- cFolder <- asks calcFolder
+    -- print cFolder
 
     liftIO $ writeFile (cFolder </> toS name FP.<.> ".calc") rawCalc
     liftIO $ writeFile (cFolder </> toS name FP.<.> ".rules") rawRules
@@ -324,15 +324,48 @@ deleteCalcH f = do
             unless exists $ throw $ FileDoesNotExist file
             liftIO $ removeFile file
 
+
+loadCalcRec ::
+    FilePath -> Set Text -> Text -> Text -> AppM [Rule Text] (FinTypeCalculusDescription [Rule Text])
+loadCalcRec workDir previousDeps rawCalc rawRules = do
+    -- rawCalc  <- readF $ workDir </> (toS f) FP.<.> "calc"
+    -- rawRules <- readF $ workDir </> (toS f) FP.<.> "rules"
+
+    imports <- parseFinTypeCalculusDescriptionImports rawCalc
+    print imports
+
+    when ((previousDeps `S.intersection` imports) /= S.empty) $ 
+        throw $ CircularImport (previousDeps `S.intersection` imports)
+
+    cdImports <- foldM foldImports (emptyFinTypeCalculusDescription []) imports
+
+    cd       <- parseFinTypeCalculusDescription rawCalc
+    rules    <- runReaderT (parseRules rawRules) cd
+    return $ cdImports <> cd{rules = rules}
+
+    where
+        readF file = do
+            exists <- liftIO $ doesFileExist $ file
+            unless exists $ throw $ FileDoesNotExist file
+            liftIO $ readFile' file
+
+        foldImports :: 
+            FinTypeCalculusDescription [Rule Text] -> Text -> AppM [Rule Text] (FinTypeCalculusDescription [Rule Text])
+        foldImports cd i = do
+            rawCalc'  <- readF $ workDir </> (toS i) FP.<.> "calc"
+            rawRules' <- readF $ workDir </> (toS i) FP.<.> "rules"
+            cd' <- loadCalcRec workDir (S.insert i previousDeps) rawCalc' rawRules'
+            return $ cd <> cd'
+
+
 loadCalcH :: FilePath -> AppM [Rule Text] ()
 loadCalcH f = do
     workDir  <- asks calcFolder
-    rawCalc  <- readF $ workDir </> f FP.<.> "calc"
-    rawRules <- readF $ workDir </> f FP.<.> "rules"
-    cd       <- parseFinTypeCalculusDescription rawCalc
-    rules    <- runReaderT (parseRules rawRules) cd
+    rawCalc  <- readF $ workDir </> (toS f) FP.<.> "calc"
+    rawRules <- readF $ workDir </> (toS f) FP.<.> "rules"
+    cd <- loadCalcRec workDir (S.singleton $ toS f) rawCalc rawRules
     -- print rules
-    put (toS f , CalDescStore cd{rules = rules} rawCalc rawRules)
+    put (toS f , CalDescStore cd rawCalc rawRules)
 
     where
         readF file = do

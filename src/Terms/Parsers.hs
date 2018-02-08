@@ -63,7 +63,8 @@ reservedCalcFile = HS.fromList ["(", ")", "{", "}", "|-", "default", "type" ,":"
 
 data CalcFileParse = CalcTypeP Bool CalcType
                    | ConP Level Text [Maybe CalcType] (Maybe CalcType) (Text, Text.Earley.Mixfix.Associativity, Int, Text)
-                   | Pragma [Char] [Text] deriving (Show, Generic, ToJSON)
+                   | Pragma [Char] [Text]
+                   | Import Text deriving (Show, Generic, ToJSON)
 
 grammarAssociativity :: Grammar r (Prod r P.String P.String Text.Earley.Mixfix.Associativity)
 grammarAssociativity =
@@ -96,6 +97,7 @@ grammarFinTypeCalculusDesc :: Grammar r (Prod r P.String P.String [CalcFileParse
 grammarFinTypeCalculusDesc = mdo
     tname <- rule $ toS <$> satisfy (not . (`HS.member` reservedCalcFile))
     pragma <- rule $ (\name params -> Pragma (toS name) params) <$> (namedToken "{#" *> tname) <*> ((some tname) <* namedToken "#}")
+    imprt <- rule $ Import <$> (namedToken "import" *> tname)
     typ <- rule $ ((CalcTypeP False) . Type . toS) <$> (namedToken "type" *> satisfy (not . (`HS.member` reservedCalcFile)))
             <|> ((CalcTypeP True) . Type . toS) <$> (namedToken "default" *> namedToken "type" *> satisfy (not . (`HS.member` reservedCalcFile)))
             <?> "type"
@@ -104,7 +106,7 @@ grammarFinTypeCalculusDesc = mdo
     conParams <- grammarConParams
     fcon <- rule $ (\n (xs,t) par -> ConP FormulaL n xs t par) <$> (tname <* namedToken ":") <*> ftyp <*> conParams
     scon <- rule $ (\n (xs,t) par -> ConP StructureL n xs t par) <$> (tname <* namedToken ":") <*> styp <*> conParams
-    return $ some (pragma <|> typ <|> fcon <|> scon)
+    return $ some (imprt <|> pragma <|> typ <|> fcon <|> scon)
 
 
 
@@ -311,6 +313,20 @@ parseFinTypeCalculusDescription t =
         ([p] , _) -> mkFinTypeCalculusDescription p
         ([]  , r) -> throw $ CalcDescParserError r
         (xs   , r) -> throw $ AmbiguousCalcDescParse r xs -- this should hopefully not happen
+
+
+
+parseFinTypeCalculusDescriptionImports :: MonadThrowJSON m => Text -> m (Set Text)
+parseFinTypeCalculusDescriptionImports t =
+    case fullParses (parser $ grammarFinTypeCalculusDesc) $ tokenize $ toS t of
+        ([p] , _) -> return $ S.fromList $ foldr onlyImports [] p
+        ([]  , r) -> throw $ CalcDescParserError r
+        (xs   , r) -> throw $ AmbiguousCalcDescParse r xs -- this should hopefully not happen
+
+    where
+        onlyImports :: CalcFileParse -> [Text] -> [Text]
+        onlyImports (Import x) xs = x:xs
+        onlyImports _ xs = xs
 
 
 

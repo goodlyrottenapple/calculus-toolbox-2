@@ -170,6 +170,12 @@ emptyFinTypeCalculusDescription :: r -> FinTypeCalculusDescription r
 emptyFinTypeCalculusDescription r = Description S.empty (Type "") [] [] r M.empty
 
 
+-- right append, where the right CaclDesc is favored, i.e. the default type is taken from the right
+instance Semigroup r => Semigroup (FinTypeCalculusDescription r) where
+    (Description ts _ fConns sConns rls mcrs) <> (Description ts' dT' fConns' sConns' rls' mcrs') = 
+        Description (S.union ts ts') dT' (fConns ++ fConns') (sConns ++ sConns') (rls <> rls') (M.union mcrs' mcrs)
+
+
 data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving (Show, Eq)
 
 deriving instance Ord a => Ord (DSequent 'MetaK a)
