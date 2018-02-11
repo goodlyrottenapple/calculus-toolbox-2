@@ -2,6 +2,7 @@
   "name": "CalculusToolbox",
   "author": "Samuel Balco",
   "version": "0.1.3",
+  "description": "The calculus toolbox is an editor for display calculi. It allows one to easily modify and recompile calculi and makes it easy to build proof trees in the given calculus.",
   "private": true,
   "devDependencies": {
     "electron": "^1.7.9",
@@ -27,10 +28,12 @@
   "build": {
     "appId": "goodlyrottneapple.CalculusToolbox",
     "mac": {
-      "category": "logic.tools.proofAssitant"
+      "category": "logic.tools.proofAssitant",
+      "icon": "build/icon.icns"
     },
     "files": [
-      "build/**/*"
+      "build/**/*",
+      "build/icon.*"
     ],
     "extraFiles": [
       {
@@ -42,7 +45,7 @@
       }
     ],
     "directories": {
-      "buildResources": "assets"
+      "buildResources": "assets/images"
     }
   },
   "scripts": {
