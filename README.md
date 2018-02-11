@@ -1,3 +1,5 @@
+<img src="./gui/public/icon.svg" height="400">
+
 # calculus-toolbox-2
 This is the new, much improved version of the original [calculus-toolbox](https://github.com/goodlyrottenapple/calculus-toolbox). The new version isn't quite feature ready, but contains most of the functionality of the original UI tool, whilst greatly simplifying the compilation of new calculi. Unlike the old toolbox, the new one also offers support for (finitary?) multitype display calculi, as discussed in the following [paper](http://www.cs.le.ac.uk/people/ak155/Papers/multi-type-deak.pdf).   
 The new tool can load and modify display calculi at runtime, with no need for re-compilation.
@@ -8,7 +10,7 @@ To get started, please download the [alpha version](https://github.com/goodlyrot
 ## A brief introduction
 
 Click on the image below for a brief video introducing the core features of the Calculus toolbox UI:
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/I-lot7xdkVM/0.jpg)](https://www.youtube.com/watch?v=I-lot7xdkVM)
+[![Calculus toolbox introduction video](https://img.youtube.com/vi/I-lot7xdkVM/0.jpg)](https://www.youtube.com/watch?v=I-lot7xdkVM)
 
 (https://www.youtube.com/watch?v=I-lot7xdkVM)
 
@@ -141,3 +143,6 @@ When opening the toolbox for the first time on Windows, you will see two firewal
 ![windows firewall](https://user-images.githubusercontent.com/10553895/34380814-7a5a8748-eb04-11e7-9589-667268a3a349.PNG)
 
 Please allow access to both. These pop up, because the core toolbox tool is running an http server, which talks to the GUI frontend.
+
+### Logo
+The calculus toolbox logo is licenced under a CC license, and was created by [Gilda Martini](https://thenounproject.com/gildamartini/collection/fauna-precolombina/?i=138974)
