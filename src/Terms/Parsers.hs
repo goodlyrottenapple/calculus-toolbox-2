@@ -119,9 +119,6 @@ tokenize ('\t':xs) = tokenize xs
 tokenize ('{':'#':xs) = "{#" : tokenize xs -- denotes a pragma
 tokenize ('#':'}':xs) = "#}" : tokenize xs -- denotes a pragma
 
-
-
-
 tokenize ('{':'{':xs)  = "{{" : case map toS $ T.breakOn "}}" $ toS xs of
         (vs,('}':'}':'f':ws)) -> toS vs : "}}f" : tokenize ws
         (vs,('}':'}':'s':ws)) -> toS vs : "}}s" : tokenize ws
@@ -198,7 +195,7 @@ data CalculusDescParseError = CalcDescParserError (Report P.String [P.String])
                             | NoTypesDeclared
                             | NoDefaultTypeDeclared
                             | SameNameConn Text
-                            | SameParserSyntax Text Text
+                            | SameParserSyntax Text Text Text
                             | IncorrectNoOfArgs {
                                 connective :: Text,
                                 expected :: Int,
@@ -276,11 +273,11 @@ mkFinTypeCalculusDescription ps = do
         checkConns = checkConns' S.empty M.empty
             where
                 checkConns' _    _    [] = return ()
-                checkConns' accN _    ((ConP _ n _ _ _):_)        | n `S.member` accN =
+                checkConns' accN _    ((ConP _ n _ _ _):_)  | n `S.member` accN =
                     throw $ SameNameConn n
                 checkConns' _    accS ((ConP _ n _ _ (s,_,_,_)):_)  | s `M.member` accS =
                     throw $
-                        SameParserSyntax n (M.findWithDefault "error, this can't happen" s accS)
+                        SameParserSyntax n (M.findWithDefault "error, this can't happen" s accS) s
                 checkConns' _ _ ((ConP _ n ts _ (s,_,_,_)):_) | length ts /= noOfHoles s =
                     throw $ IncorrectNoOfArgs n (length ts) (noOfHoles s)
                 checkConns' accN accS ((ConP _ n _ _ (s,_,_,_)):xs) | otherwise =

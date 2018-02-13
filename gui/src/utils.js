@@ -54,7 +54,7 @@ function prettyErrorMsg(e) {
     case 'SameNameConn':
       return "There are multiple definitions of '" + e.contents + "'."
     case 'SameParserSyntax':
-      return "Both '" + e.contents[0] + "' and '" + e.contents[1] + "' have the same parser syntax. Please use unique parser syntax for each connective definition to avoid ambiguous parsing."
+      return `Both '${e.contents[0]}' and '${e.contents[1]}' have the same parser syntax ("${e.contents[2]}"). Please use unique parser syntax for each connective definition to avoid ambiguous parsing.`
     case 'AbbrevNotFound':
       return `The ${e.level === 'FormulaL' ? 'formula' : 'structure'} abbreviation '${e.name}' (of type '${e.type}') was not found. Try adding the abbreviation via the sidebar first.`
     default: 
