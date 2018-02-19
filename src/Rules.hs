@@ -7,6 +7,7 @@ For more information on how to write Haddock comments check the user guide:
 <https://www.haskell.org/haddock/doc/html/index.html>
 -}
 
+{-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveFunctor         #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
