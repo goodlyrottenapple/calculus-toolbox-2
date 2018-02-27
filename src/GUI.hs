@@ -40,10 +40,8 @@ import qualified Data.Set                    as S
 import Control.Monad.Except
 import Control.Monad.Reader
 -- import Text.Earley
-import System.IO (hSetNewlineMode, universalNewlineMode)
 import System.FilePath.Posix((</>), dropExtension, takeExtension)
 import qualified System.FilePath.Posix as FP
-import Data.Text.IO (hGetContents)
 import System.Directory(listDirectory, removeFile, doesFileExist)
 
 data GUIError = CalculusDescriptionNotLoaded
@@ -191,8 +189,6 @@ instance MonadIO (AppM r) where
 instance MonadThrowJSON (AppM r) where
     throw e = throwIO $ err400 {errBody = encode e }
 
-instance MonadThrowJSON IO where
-    throw e = throwIO e
 
 
 instance MonadState (Text, CalDescStore (FinTypeCalculusDescription r)) (AppM r) where
@@ -484,15 +480,6 @@ writeJSCode jsPath = writeJSForAPI api (customJSWith myOptions) $ jsPath
         myOptions = defCommonGeneratorOptions{
             urlPrefix = "http://localhost:${port}", 
             Servant.JS.Internal.moduleName="exports"}
-
-
--- converts line endings to \n to ensure consistent decoding...
--- should fix issues with parsing?
-readFile' :: FilePath -> IO Text
-readFile' name = do
-    h <- openFile name ReadMode
-    hSetNewlineMode h universalNewlineMode 
-    hGetContents h
 
 
 -- checks that the calculus+rule files exist and launches runEmptyGUI if the don't, 

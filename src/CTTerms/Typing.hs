@@ -29,7 +29,7 @@
 module CTTerms.Typing where
 
 import CTTerms.Core
-import CTTerms.Parser
+-- import CTTerms.Parser
 
 import           Lib.Prelude
 import qualified Prelude            as P

@@ -17,17 +17,15 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall -Werror
   exposed-modules:     Terms
-                     --  SequentCalc
-                     --, SequentCalcJSON
                      , Rules
-                     , Rules.CutElimConditions
-                     --, RulesInv
-                     --, Terms.TH
+                     -- , Rules.CutElimConditions
                      , Terms.Parsers
                      , Terms.JSON
                      , CTTerms.Core
-                     , CTTerms.Parser
-                     , CTTerms.Typing
+                     , CTTerms.Parser.Core
+                     , CTTerms.Parser.DescParser
+                     , CTTerms.Typing.DescParser
+                     -- , CTTerms.Typing
                      , GUI
   other-modules:       Lib.Prelude
                      , Servant.JS.Custom
@@ -37,7 +35,7 @@ library
                      , random
                      , text
                      , containers
-                     -- , bifunctors
+                     , bifunctors
                      , template-haskell
                      , singletons
                      , pretty-tree
@@ -80,6 +78,7 @@ test-suite calculus-toolbox-test
   build-depends:       base
                      , mcsequent
                      , protolude >= 0.1.6 && < 0.3
+                     , hspec == 2.*
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
