@@ -9,7 +9,6 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeOperators         #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module GUI where
 
@@ -187,7 +186,7 @@ instance MonadIO (AppM r) where
     liftIO ioa = AppM (\_ -> ioa)
 
 instance MonadThrowJSON (AppM r) where
-    throw e = throwIO $ err400 {errBody = encode e }
+    throw e = throwIO $ err300 {errBody = encode e }
 
 
 
@@ -211,8 +210,8 @@ freeze m = do
     (_, CalDescStore{..}) <- get
     runReaderT m parsed
 
-instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
-    throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
+-- instance MonadThrowJSON (ReaderT (FinTypeCalculusDescription r) (AppM r')) where
+--     throw e = ReaderT $ \_ -> throwIO $ err300 {errBody = encode e }
 
 
 parseDSeqH :: ParseTerm AbbrevsMapInternal -> AppM r (LatexDSeq (FinTypeCalculusDescription r) 'ConcreteK)
@@ -437,8 +436,8 @@ app cfg = myCors (serve api (readerServer cfg))
 
 
 
-instance MonadThrowJSON (ReaderT x IO) where
-    throw = throwIO
+-- instance MonadThrowJSON (ReaderT x IO) where
+--     throw = throwIO
 
 runCalcIO :: forall r a. FinTypeCalculusDescription r -> CalcMT r IO a -> IO a
 runCalcIO env = \rT -> runReaderT rT env

@@ -27,7 +27,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module CTTerms.Parser.Core(
-    Token, joinT, unTok, 
+    Token, joinT, unTok, Row, Col, rowStart, colStart,
     tokenize, TokenizerSettings(..), defaultTokenizerSettings, 
     G, parseG, parseG', satisfyT, var, 
     mkTable) where
@@ -93,6 +93,8 @@ instance Ord a => Ord (Token a) where
 instance IsString a => IsString (Token a) where
     fromString s = Token (fromString s) 0 0 0 0
 
+instance StringConv a b => StringConv (Token a) b where
+    strConv l = strConv l . unTok
 
 joinT :: Semigroup a => Token a -> Token a -> Token a
 joinT (Token t1 rS _ cS _) (Token t2 _ rE _ cE) = Token (t1 <> t2) rS rE cS cE

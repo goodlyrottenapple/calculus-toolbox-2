@@ -51,9 +51,6 @@ import           Text.Regex         (mkRegex, splitRegex)
 -- import Control.Monad.Catch
 
 
-deriving instance Generic (Report P.String [P.String])
-deriving instance ToJSON (Report P.String [P.String])
-
 deriving instance Generic Associativity
 deriving instance ToJSON Associativity
 

@@ -25,9 +25,10 @@
 {-# LANGUAGE TupleSections    #-}
 {-# LANGUAGE ViewPatterns, PatternSynonyms #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module CTTerms.Parser.DescParser(
-    Binding(..), CTTerms.Parser.DescParser.Fixity(..), DescParse(..), 
+    Binding(..), CTTerms.Parser.DescParser.Fixity(..), DescParse(..), Visibility(..),
     tokenizeDescParse,
     gSetLang, gIntLang, gFormulaLang, gType, gDescParse, gDescParseList) where
 
@@ -46,7 +47,7 @@ import qualified Prelude            as P
 -- import Control.Monad.Except(withExceptT)
 
 
--- import           Data.Aeson
+import           Data.Aeson
 import           Data.Char
 import           Data.HashSet       (HashSet)
 import qualified Data.HashSet       as HS
@@ -69,6 +70,64 @@ import           Text.Earley.Mixfix(Associativity(..), mixfixExpressionSeparate)
 
 -- debug :: a -> P.String -> a
 -- debug a m = Debug.Trace.trace m a
+
+
+
+newtype Binding = Binding Int deriving (Eq, Show, Ord, Generic, ToJSON)
+
+deriving instance Generic Text.Earley.Mixfix.Associativity
+deriving instance ToJSON Text.Earley.Mixfix.Associativity
+
+data Fixity = 
+    Prefix Binding
+  | Infix {
+        binding :: Binding
+      , assoc :: Text.Earley.Mixfix.Associativity
+    }
+  | Mixfix Binding deriving (Show, Generic, ToJSON)
+
+
+data PragmaTy = Macro deriving (Show, Generic, ToJSON)
+
+data Visibility a = Visible [a] | Hidden [a] deriving (Show, Functor, Generic, ToJSON)
+
+data DescParse a = 
+    TypeSig {
+        name :: a
+      , inTys :: [CTTerms.Core.Type a a] 
+      , outTy :: CTTerms.Core.Type a a
+    }
+  | ParserOpts {
+        name :: a
+      , fixity :: CTTerms.Parser.DescParser.Fixity
+    }
+  | SyntaxOpts {
+        name :: a
+      , latex :: a
+      , katex :: Maybe a
+    } 
+  | Pragma {
+        pragmaType :: PragmaTy
+      , params :: [a]
+    } 
+  | Import {
+        moduleName :: [a]
+      , as :: Maybe a
+      , visible :: Visibility a
+      -- , renaming :: [(a,a)]
+    } deriving (Show, Generic, ToJSON)
+
+-- deriving instance ToJSON a => ToJSON (DescParse a)
+
+
+instance Functor DescParse where
+    fmap f (TypeSig n ts t) = TypeSig (f n) (map (bimap f f) ts) (bimap f f t) --(map (bimap (bimap f (map (bimap f f))) f) ts) (bimap (bimap f (map (bimap f f))) f t)
+    fmap f (ParserOpts s fx) = ParserOpts (f s) fx
+    fmap f (SyntaxOpts n ltx ktx) = SyntaxOpts (f n) (f ltx) (map f ktx)
+    fmap f (Pragma t ps) = Pragma t (map f ps)
+    fmap f (Import n a v) = Import (map f n) (map f a) (map f v) --(map (bimap f f) r)
+
+
 
 
 tokenizeDescParse :: P.String -> [Token Text]
@@ -217,55 +276,6 @@ gType = mdo
     return $ nVar <|> cType <|> cListType
 
 
-newtype Binding = Binding Int deriving (Eq, Show, Ord)
-
-data Fixity = 
-    Prefix Binding
-  | Infix {
-        binding :: Binding
-      , assoc :: Text.Earley.Mixfix.Associativity
-    }
-  | Mixfix Binding deriving Show
-
-
-data PragmaTy = Macro deriving Show
-
-data Visibility a = Visible [a] | Hidden [a] deriving (Show, Functor)
-
-data DescParse a = 
-    TypeSig {
-        name :: a
-      , inTys :: [CTTerms.Core.Type a a] 
-      , outTy :: CTTerms.Core.Type a a
-    }
-  | ParserOpts {
-        name :: a
-      , fixity :: CTTerms.Parser.DescParser.Fixity
-    }
-  | SyntaxOpts {
-        name :: a
-      , latex :: a
-      , katex :: Maybe a
-    } 
-  | Pragma {
-        pragmaType :: PragmaTy
-      , params :: [a]
-    } 
-  | Import {
-        moduleName :: [a]
-      , as :: Maybe a
-      , visible :: Visibility a
-      -- , renaming :: [(a,a)]
-    } deriving Show
-
-
-instance Functor DescParse where
-    fmap f (TypeSig n ts t) = TypeSig (f n) (map (bimap f f) ts) (bimap f f t) --(map (bimap (bimap f (map (bimap f f))) f) ts) (bimap (bimap f (map (bimap f f))) f t)
-    fmap f (ParserOpts s fx) = ParserOpts (f s) fx
-    fmap f (SyntaxOpts n ltx ktx) = SyntaxOpts (f n) (f ltx) (map f ktx)
-    fmap f (Pragma t ps) = Pragma t (map f ps)
-    fmap f (Import n a v) = Import (map f n) (map f a) (map f v) --(map (bimap f f) r)
-
 
 reservedDescParse :: HashSet Text
 reservedDescParse = HS.fromList ["->", ":", "{", "}", "infixl", "infixr", "prefix", "mixfix", "=", "syntax", "import", "renaming", "hiding"] 
@@ -278,8 +288,8 @@ gDescParse = mdo
             var reservedDescParse
         <|> namedToken "(" *> parserSyntax <* namedToken ")"
     parserSyntax <- rule $
-            satisfy (const True) -- <* namedToken ("::" :: Token Text)
-        <|> joinT <$> satisfy (const True) <*> parserSyntax
+            satisfy (/= ")") -- <* namedToken ("::" :: Token Text)
+        <|> joinT <$> satisfy (/= ")") <*> parserSyntax
     typeLang <- gType
     arr      <- rule $ ([],) <$> typeLang
         <|> (\x (xs,ty) -> (x:xs, ty)) <$> typeLang <* namedToken "->" <*> arr

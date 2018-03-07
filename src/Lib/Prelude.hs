@@ -23,7 +23,8 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE FunctionalDependencies   #-}
-
+{-# LANGUAGE DeriveAnyClass   #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Lib.Prelude
     ( module Exports, MonadThrowJSON(..), SomeVec(..)
@@ -42,6 +43,7 @@ import           Data.Aeson
 import qualified Data.Map as M
 import System.IO (hSetNewlineMode, universalNewlineMode)
 import Data.Text.IO (hGetContents)
+import           Text.Earley(Report(..))
 
 class Monad m => MonadThrowJSON m where
   throw :: (ToJSON e, Exception e) => e -> m a
@@ -51,6 +53,15 @@ instance MonadThrowJSON IO where
 
 instance MonadThrowJSON m => MonadThrowJSON (StateT c m) where
   throw e = lift $ throw e
+
+instance MonadThrowJSON m => MonadThrowJSON (ReaderT r m) where
+  throw e = lift $ throw e
+
+
+
+deriving instance Generic a => Generic (Report a [a])
+deriving instance (Generic a, ToJSON a) => ToJSON (Report a [a])
+
 
 
 -- instance e ~ SomeException => MonadThrowJSON (Either e) where
@@ -76,11 +87,11 @@ uncurry3 f (a, b, c) = f a b c
 
 -- converts line endings to \n to ensure consistent decoding...
 -- should fix issues with parsing?
-readFile' :: FilePath -> IO Text
+readFile' :: MonadIO m => FilePath -> m Text
 readFile' name = do
-    h <- openFile name ReadMode
-    hSetNewlineMode h universalNewlineMode 
-    hGetContents h
+    h <- liftIO $ openFile name ReadMode
+    liftIO $ hSetNewlineMode h universalNewlineMode 
+    liftIO $ hGetContents h
 
 
 
