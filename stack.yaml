@@ -4,5 +4,5 @@ packages:
 - .
 extra-deps:
 - pretty-tree-0.1.0.0
-resolver: lts-9.11
+resolver: lts-10.8
 local-bin-path: gui/resources

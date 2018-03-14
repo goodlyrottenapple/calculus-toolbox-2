@@ -29,7 +29,7 @@
 
 module CTTerms.Typing.DescParser where
 
-import           Lib.Prelude
+import           Lib.Prelude hiding (moduleName, Prefix, Fixity, Type)
 
 import CTTerms.Core
 import CTTerms.Parser.Core
@@ -73,7 +73,7 @@ data DescParseTypingError =
   | InvalidType {
       errorLocation :: ErrorLocation,
       conName :: Text,
-      typ :: CTTerms.Core.Type Text Text
+      typ :: Type Text Text
     }
   | MultipleTypeSigsSameName {
       errorLocation1 :: ErrorLocation,
@@ -138,59 +138,13 @@ data DescParseTypingError =
 -- | InvalidPragma [Char] [Text]
     deriving (Show, Generic, ToJSON, Typeable)
 
+
+instance Exception DescParseTypingError
+
 data DefnType = TypeSigD | ParserOptsD | SyntaxOptsD | PragmaD | ImportD deriving (Show, Generic, ToJSON, Typeable)
 
 -- data DescParseTypingWarning = 
 --     NoParserOptsFound | NoSyntaxOptsFound
-
-
-instance Exception DescParseTypingError
-
-data LevelList a (l :: Level) where
-    One :: a -> LevelList a 'Term
-    Cons :: a -> LevelList a (Lower l) -> LevelList a l 
-
-deriving instance Show a => Show (LevelList a l)
-
-head :: LevelList a l -> a
-head (One a) = a
-head (Cons a _) = a
-
-
-type family NotTerm (l :: Level) where
-    NotTerm 'Term = 'False
-    NotTerm l = 'True
-
-tail :: NotTerm l ~ 'True => LevelList a l -> LevelList a (Lower l)
-tail (Cons _ xs) = xs
-
-mkLevelList :: a -> a -> a -> LevelList a 'Structure
-mkLevelList a b c = Cons a $ Cons b $ One c
-
-data ConnDescription t = ConnDescription {
-    name    :: Text
-  , inTypes :: [t]
-  , outType :: t
-  , originalModule :: Module
-  , as :: Maybe Text
-  , fixity  :: CTTerms.Parser.DescParser.Fixity
-  , latex   :: Maybe Text
-  , katex   :: Maybe Text
-} deriving Show
-
-
-
-
-data CalcDesc r = CalcDesc {
-    conns  :: LevelList (ConnDescription (CTTerms.Core.Type Text Text)) 'Structure
-  , mod    :: Module
-  , rules  :: r
-  -- , macros :: Map Text (Int,Text)
-} deriving Show
-
-
-newtype Module = Module [Text] deriving (Show, Generic, ToJSON, Typeable, Ord, Eq)
-
 
 
 
@@ -214,7 +168,7 @@ data FormulaLangTypeError a t = TypeMismatch {
 } deriving (Show, Generic, ToJSON, Typeable)
 
 instance (Typeable a, Typeable t, Show a, Show t) => 
-    Exception (CTTerms.Typing.DescParser.FormulaLangTypeError a t)
+    Exception (FormulaLangTypeError a t)
 
 isOfType :: (Eq t, Show a, Show t, Typeable a, Typeable t, ToJSON a, ToJSON t,
     MapLike c (Token a) t, MonadState c m, MonadReader Module m, MonadThrowJSON m) => 
@@ -272,7 +226,7 @@ instance (Show a, Typeable a, ToJSON a, MapLike c (Token a) FormulaLangTy) =>
 
 
 instance (Show a, Typeable a, ToJSON a, MapLike c (Token a) FormulaLangTy) => 
-    TypeCheck c (Token a) FormulaLangTy (CTTerms.Core.Type (Token a) (Token a)) where
+    TypeCheck c (Token a) FormulaLangTy (Type (Token a) (Token a)) where
     typeCheck (NVar (Just e)) = e `isOfType` ElemVar
     typeCheck (CType _ (CSetDecl t cs)) = do
         t `isOfType` SetVar
@@ -283,7 +237,7 @@ instance (Show a, Typeable a, ToJSON a, MapLike c (Token a) FormulaLangTy) =>
 
 
 instance (Show a, Typeable a, ToJSON a, MapLike c (Token a) FormulaLangTy) => 
-    TypeCheck c (Token a) FormulaLangTy [CTTerms.Core.Type (Token a) (Token a)] where
+    TypeCheck c (Token a) FormulaLangTy [Type (Token a) (Token a)] where
         typeCheck = mapM_ typeCheck
 
 
@@ -294,8 +248,8 @@ runTypeChecking trm = evalStateT (typeCheck @(Map a t) @a @t trm) emptyM
 
 checkTypeSig :: (MonadReader Module m, MonadThrowJSON m) => DescParse (Token Text) -> m ()
 checkTypeSig TypeSig{..} = do
-    levelMatches (getLevel outTy) (map getLevel inTys)
-    runTypeChecking $ outTy : inTys
+    levelMatches (getLevel outType) (map getLevel inTypes)
+    runTypeChecking $ outType : inTypes
     where
         levelMatches :: (MonadReader Module m , MonadThrowJSON m) => Maybe Level -> [Maybe Level] -> m ()
         levelMatches Nothing _ = do
@@ -303,7 +257,7 @@ checkTypeSig TypeSig{..} = do
             throw $ InvalidType {
               errorLocation = mkErrorLocation m name,
               conName = unTok name,
-              typ = bimap unTok unTok outTy
+              typ = bimap unTok unTok outType
             } -- cant have a type ... -> ... -> Name
         levelMatches _ [] = return ()
         levelMatches l (Nothing:tys) = levelMatches l tys
@@ -370,8 +324,8 @@ checkSyntaxOpts _ _ = return ()
 checkTypeSigAndParserSyntaxOpts :: (MonadReader Module m, MonadThrowJSON m) => 
     [DescParse (Token Text)] -> m ()
 checkTypeSigAndParserSyntaxOpts ds = do
-    let declFuns   = M.fromList $ [(name, length inTys) | TypeSig{..} <- ds]
-        declFunSet = S.fromList $ [name                 | TypeSig{..} <- ds]
+    let declFuns   = M.fromList $ [(name, length inTypes) | TypeSig{..} <- ds]
+        declFunSet = S.fromList $ [name                   | TypeSig{..} <- ds]
 
     forM_ ds $ \x -> do
         checkTypeSig x 
@@ -418,8 +372,8 @@ checkDuplicates (x@Import{}:xs)
         y@Import{} -> (CTTerms.Parser.DescParser.moduleName x) == (CTTerms.Parser.DescParser.moduleName y)
         _          -> False) xs = do
         currentM <- ask
-        let (Just headOfModuleName1) = Lib.Prelude.head (CTTerms.Parser.DescParser.moduleName x)
-            (Just headOfModuleName2) = Lib.Prelude.head (CTTerms.Parser.DescParser.moduleName x')
+        let (Just headOfModuleName1) = head (CTTerms.Parser.DescParser.moduleName x)
+            (Just headOfModuleName2) = head (CTTerms.Parser.DescParser.moduleName x')
         throw $ DuplicateImport {
           errorLocation1 = mkErrorLocation currentM headOfModuleName1
         , errorLocation2 = mkErrorLocation currentM headOfModuleName2
@@ -466,6 +420,19 @@ checkCircularDependencies (_:xs) = checkCircularDependencies xs
 
 
 
+mkConnDescription :: (MonadReader Module m, Ord a) =>
+    Map a Fixity -> Map a (Maybe a, Maybe a) -> Maybe Text ->
+    (a, [Type a a], Type a a) -> 
+    m (ConnDescription a (Type a a))
+mkConnDescription fixityMap syntaxMap as (name, inTypes, outType) = do
+    originalModule <- ask
+    let fixity = case M.lookup name fixityMap of
+        { Just f -> f; Nothing -> Prefix maxBound } -- this is a bit arbitrary atm!!
+        (latex,katex) = case M.lookup name syntaxMap of
+        { Just x -> x; Nothing -> (Nothing, Nothing) }
+    return ConnDescription{..}
+
+
 -- filterByVisibilityRemovingImports :: (MonadReader Module m, MonadThrowJSON m) => 
 --     Visibility Text -> [DescParse (Token Text)] -> m [DescParse (Token Text)]
 -- filterByVisibilityRemovingImports v ds = do
@@ -492,9 +459,17 @@ checkCircularDependencies (_:xs) = checkCircularDependencies xs
 --         filterDescParse c hs (x:xs) = x : filterDescParse c hs xs
 
 -- mkCalcDesc "." ["Core", "Lattice"] (Just "L") (Hidden [])
-mkCalcDesc :: (MonadIO m, MonadThrowJSON m, StringConv s FilePath, StringConv s Text, MonadState (Map Module Module) m) => 
-    FilePath -> [s] -> Maybe s -> Visibility s -> m () --m (CalcDesc ())
-mkCalcDesc basePath modulePathList _ visibility = do
+mkCalcDesc :: 
+    (MonadIO m, 
+    MonadThrowJSON m, 
+    -- MonadLogger m,
+    MonadState (Map Module Module) m,
+    StringConv s FilePath, 
+    StringConv s Text) => 
+    FilePath -> [s] -> Maybe s -> Visibility s -> 
+    m (LevelList 'Structure [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
+    --m () --m (CalcDesc Text ())
+mkCalcDesc basePath modulePathList as visibility = do
     -- open calc file
     rawCalc <- readCalcDescFile basePath (map toS modulePathList)
 
@@ -517,19 +492,44 @@ mkCalcDesc basePath modulePathList _ visibility = do
     importedCalcs <- mapM (\Import{..} -> mkCalcDesc basePath moduleName as visible) imports
 
     -- generate con defns
+    let fixityMap = M.fromList [(name, fixity)           | ParserOpts{..} <- parsedCalc]
+        syntaxMap = M.fromList [(name, (Just latex, katex))   | SyntaxOpts{..} <- parsedCalc]
+        typeSigs  = [(name, inTypes, outType) | TypeSig{..} <- parsedCalc]
+        trmTySigs = filter (\(_, _, outType) -> getLevel outType == Just Term)      typeSigs
+        fmlTySigs = filter (\(_, _, outType) -> getLevel outType == Just Formula)   typeSigs
+        strTySigs = filter (\(_, _, outType) -> getLevel outType == Just Structure) typeSigs
 
+    trmConns <- mkConns fixityMap syntaxMap trmTySigs
+    fmlConns <- mkConns fixityMap syntaxMap fmlTySigs
+    strConns <- mkConns fixityMap syntaxMap strTySigs
+    let conns = mkLevelList strConns fmlConns trmConns
 
+    return conns
     -- merge??
+
+        -- check that two files arent imported under same "as" prefix
+    -- mk parsers
 
 
     -- parse rules??
 
 
+
+
     -- apply visibility, etc.
     -- filteredParsedCalc <- inCurrentModule $ filterByVisibilityRemovingImports (map toS visibility) parsedCalc
 
-    return ()
+    -- return ()
 
     where
         inCurrentModule :: ReaderT Module m a -> m a
         inCurrentModule f = runReaderT f (Module (map toS modulePathList)) 
+
+        mkConns :: (Monad m, Ord a) => Map a Fixity -> Map a (Maybe a, Maybe a) -> 
+            [(a, [Type a a], Type a a)] -> m [ConnDescription a (Type a a)]
+        mkConns fMap sMap = mapM $ inCurrentModule . mkConnDescription fMap sMap (map toS as)
+
+
+
+test :: IO (LevelList 'Structure [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
+test =  evalStateT (mkCalcDesc "./test" [("Lattice" :: Text)] Nothing (Hidden [])) M.empty

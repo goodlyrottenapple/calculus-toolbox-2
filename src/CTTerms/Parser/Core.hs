@@ -27,15 +27,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module CTTerms.Parser.Core(
-    Token, joinT, unTok, Row, Col, rowStart, colStart,
+    Token, joinT, unTok, Row, Col, rowStart, colStart, rowEnd, colEnd,
     tokenize, TokenizerSettings(..), defaultTokenizerSettings, 
-    G, parseG, parseG', satisfyT, var, 
-    mkTable) where
+    G, parseG, parseG', parseG'', satisfyT, var, 
+    mkTable, mkTableBinding, holey, Hole(..), mkHole, mkHoleProdLisp) where
 
--- import CTTerms.Core
-import           Lib.Prelude
+import CTTerms.Core
+import           Lib.Prelude hiding (Associativity, Type)
 import qualified Prelude            as P
 
+import CTTerms.Core(Binding)
 -- import           Data.Singletons
 -- import Text.Parsec (CalculusDescParseError, parse, between, eof, try)
 -- import Text.Parsec.Text (Parser)
@@ -44,7 +45,7 @@ import qualified Prelude            as P
 -- import Control.Applicative
 -- import Control.Monad.Except(withExceptT)
 
-
+import Data.List(groupBy)
 import           Data.Aeson
 import           Data.Char
 import           Data.HashSet       (HashSet)
@@ -96,7 +97,7 @@ instance IsString a => IsString (Token a) where
 instance StringConv a b => StringConv (Token a) b where
     strConv l = strConv l . unTok
 
-joinT :: Semigroup a => Token a -> Token a -> Token a
+joinT :: Monoid a => Token a -> Token a -> Token a
 joinT (Token t1 rS _ cS _) (Token t2 _ rE _ cE) = Token (t1 <> t2) rS rE cS cE
 
 
@@ -140,7 +141,7 @@ data TokenizerSettings = TokenizerSettings {
   , block :: [(P.String, P.String)]
   , delim :: [Char]
   , special :: [Char]
-}
+} deriving Show
 
 defaultTokenizerSettings :: TokenizerSettings
 defaultTokenizerSettings = TokenizerSettings {
@@ -240,6 +241,12 @@ parseG' tok g t =
         (_ , (Report p e u)) -> Left $ Report p (map unTok e) (map unTok u)
 
 
+parseG'' :: (Text -> [Token Text]) -> G t -> Text -> ([t], Report Text [Text])
+parseG'' tok g t =
+    case fullParses (parser $ g) $ tok t of
+        (ps , Report p e u) -> (ps, Report p (map unTok e) (map unTok u))
+
+
 
 
 
@@ -254,35 +261,78 @@ var reserved = satisfy (\t ->
     not (isDigit $ T.head (unTok t)))
 
 
--- parseG :: G t -> Text -> Either (Report (Token Text) [Token Text]) t
--- parseG g t =
---     case fullParses (parser $ g) $ tokenizeDescFile $ toS t of
---         ([p] , _) -> Right p
---         (_ , r) -> Left r
 
--- parseG' :: G t -> Text -> Either (Report Text [Text]) t
--- parseG' g t =
---     case fullParses (parser $ g) $ tokenizeDescFile $ toS t of
---         ([p] , _) -> Right $ p
---         (_ , (Report p e u)) -> Left $ Report p (map unTok e) (map unTok u)
+data Hole a = Hole | NameHole | Tok a deriving Show
 
 
+mkHole :: Maybe Text -> P.String -> [Type a b] -> [Hole (Token Text)]
+mkHole _ ""       _           = []
+mkHole as ('_':xs) (NVar _:ts) = NameHole : mkHole as xs ts
+mkHole as ('_':xs) (_:ts)      = Hole : mkHole as xs ts
+mkHole as xs       ts          = lst ++ mkHole Nothing rest ts
+  where 
+    lst = case as of
+        Just prefx -> [Tok (Token prefx 0 0 0 0), Tok ".", Tok (Token (toS i) 0 0 0 0)]
+        Nothing -> [Tok (Token (toS i) 0 0 0 0)]
+    (i, rest) = P.span (/= '_') xs
 
-holey :: P.String -> Holey (Token Text)
-holey ""       = []
-holey ('_':xs) = Nothing : holey xs
-holey xs       = Just (Token (toS i) 0 0 0 0) : holey rest
-  where (i, rest) = P.span (/= '_') xs
 
+
+mkHoleProdLisp :: HashSet Text -> Maybe Text -> [Token Text] -> [Type a b] -> 
+    Holey (Prod r (Token Text) (Token Text) (Either (Token Text) (Token Text)))
+mkHoleProdLisp reserved as tokens ts = 
+    (case as of
+        Just prefx -> [Just $ Right <$> namedToken (Token prefx 0 0 0 0), Just $ Right <$> namedToken "."]
+        Nothing -> []) ++
+    map (\t -> Just $ Right <$> namedToken t) tokens ++
+    mkHoleProdLisp' reserved ts
+    where
+        mkHoleProdLisp' :: HashSet Text -> [Type a b] -> 
+            Holey (Prod r (Token Text) (Token Text) (Either (Token Text) (Token Text)))
+        mkHoleProdLisp' _ [] = []
+        mkHoleProdLisp' r (NVar _:xs) = Just prod : mkHoleProdLisp' r xs
+            where
+                prod = Left <$> satisfyT (not . (`HS.member` r))
+        mkHoleProdLisp' r (_:xs) = Nothing : mkHoleProdLisp' r xs
+
+
+
+holey :: Maybe Text -> P.String -> Holey (Token Text)
+holey _ ""        = []
+holey as ('_':xs) = Nothing : holey as xs
+holey as xs       = lst ++ holey Nothing rest
+  where 
+    lst = case as of
+        Just prefx -> [Just (Token prefx 0 0 0 0), Just ".", Just (Token (toS i) 0 0 0 0)]
+        Nothing -> [Just (Token (toS i) 0 0 0 0)]
+    (i, rest) = P.span (/= '_') xs
 
 
 mkTable :: [[(P.String, Associativity, [expr] -> expr)]] -> [[(Holey (Prod r (Token Text) (Token Text) (Token Text)), Associativity, Holey (Token Text) -> [expr] -> expr)]]
 mkTable [] = []
 mkTable (x:xs) = mkRow x : mkTable xs
     where
-        mkRow :: [(P.String, Associativity, [expr] -> expr)] -> [(Holey (Prod r (Token Text) (Token Text) (Token Text)), Associativity, Holey (Token Text) -> [expr] -> expr)]
+        mkRow :: [(P.String, Text.Earley.Mixfix.Associativity, [expr] -> expr)] -> [(Holey (Prod r (Token Text) (Token Text) (Token Text)), Associativity, Holey (Token Text) -> [expr] -> expr)]
         mkRow [] = []
         mkRow ((s, a, f):ys) = 
-            let hs         = holey s
+            let hs         = holey Nothing s
                 hprod      = map (map namedToken) hs in
             (hprod, a, \_ -> f): mkRow ys
+
+
+-- mkTable' :: [[(Holey (Prod r (Token Text) (Token Text) ident), Holey ident -> [expr] -> expr)]] -> [[(Holey (Prod r (Token Text) (Token Text) ident), Associativity, Holey ident -> [expr] -> expr)]]
+-- mkTable' [] = []
+-- mkTable' (x:xs) = mkRow x : mkTable' xs
+--     where
+--         mkRow :: [(Holey (Prod r (Token Text) (Token Text) ident), Text.Earley.Mixfix.Associativity, Holey ident -> [expr] -> expr)] -> [(Holey (Prod r (Token Text) (Token Text) ident), Associativity, Holey ident -> [expr] -> expr)]
+--         mkRow [] = []
+--         mkRow ((s, a, f):ys) = 
+--             let hprod = map (map namedToken) s in
+--             (hprod, a, \_ -> f): mkRow ys
+
+
+mkTableBinding :: [(Holey (Prod r (Token Text) (Token Text) ident), Associativity, Binding, Holey ident -> [expr] -> expr)] -> [[(Holey (Prod r (Token Text) (Token Text) ident), Associativity, Holey ident -> [expr] -> expr)]]
+mkTableBinding =  
+    map (map (\(h,a,_,f) -> (h,a,f))) . 
+    groupBy (\(_,_,a,_) (_,_,b,_) -> a == b) . 
+    sortBy (\(_,_,a,_) (_,_,b,_) -> compare a b)

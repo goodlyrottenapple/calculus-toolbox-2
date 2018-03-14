@@ -31,7 +31,7 @@ module CTTerms.Typing where
 import CTTerms.Core
 -- import CTTerms.Parser
 
-import           Lib.Prelude
+import           Lib.Prelude hiding (Type)
 import qualified Prelude            as P
 -- import           Data.HashSet       (HashSet)
 import qualified Data.HashSet       as HS
@@ -52,7 +52,7 @@ m ?! k = case M.lookup k m of
     Nothing -> k
 
 
-type ConMap = Map Text ([CTTerms.Core.Type (Text, [FormulaLang Text Text]) Text], (CTTerms.Core.Type (Text, [FormulaLang Text Text]) Text))
+type ConMap = Map Text ([Type (Text, [FormulaLang Text Text]) Text], (Type (Text, [FormulaLang Text Text]) Text))
 type SetNameMap = Map Text Text
 type ElemNameMap = Map Text Text
 
@@ -123,7 +123,7 @@ applyTypes' conMap (Con n args ((Just fVar), cs))
 applyTypesList' :: (MonadState ApplyTypeState m, MonadError Text m) => 
     ConMap ->
     [CTTerm l 'Concrete (Maybe Text, [FormulaLang Text Text]) Text] ->
-    [CTTerms.Core.Type (Text, [FormulaLang Text Text]) Text] ->
+    [Type (Text, [FormulaLang Text Text]) Text] ->
     m [CTTerm l 'Concrete (Maybe Text, [FormulaLang Text Text]) Text]
 applyTypesList' _      [] [] = return []
 applyTypesList' conMap (x@(Nm _):xs) (NVar Nothing:ys) = do

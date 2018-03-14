@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveAnyClass        #-}
-
 {-# LANGUAGE DeriveDataTypeable        #-}
 {-# LANGUAGE DeriveFoldable            #-}
 {-# LANGUAGE DeriveFunctor             #-}
@@ -23,19 +21,24 @@
 {-# LANGUAGE TypeInType                #-}
 {-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 module CTTerms.Core where
 
 -- import qualified Data.Text          as T
-import           Lib.Prelude
+import           Lib.Prelude hiding (Type, Fixity, Associativity, Prefix, Infix)
 -- import           Data.Map           (Map)
 -- import qualified Data.Map           as M
 -- import           Data.Set           (Set)
 -- import qualified Data.Set           as S
 import           Data.Aeson(ToJSON)
--- import           Data.Singletons.TH
+import           Data.Singletons.TH(genSingletons)
 -- import           GHC.TypeLits
 import Data.Bifunctor.TH
+import           Text.Earley.Mixfix(Associativity(..))
+
 type CVCLang = Text
 
 -- type Trm = (Int, [CVCLang])
@@ -116,24 +119,6 @@ removeDisjoint x = x
 -- printAssert (AssertInt op x y) = "ASSERT " <> (printInt x) <> " " <> printCompOp op <> " " <> (printInt y) <> ";"
     
 
--- instance Bifunctor SetLang where
---     bimap _ g (SVar s) = SVar $ g s
---     bimap f _ (FSet ns) = FSet $ map f ns
---     bimap _ g (SOp o (Left s)) = SOp o (Left $ g s)
---     bimap f g (SOp o (Right xs)) = SOp o (Right $ map (bimap f g) xs)
-
-
--- instance Bifunctor IntLang where
---     bimap _ _ (IntVal i) = IntVal i
---     bimap f g (Card s) = Card $ bimap f g s
-
--- instance Bifunctor FormulaLang where
---     bimap f g (Member e s) = Member (f e) (bimap f g s)
---     bimap f g (BinSet op s1 s2) = BinSet op (bimap f g s1) (bimap f g s2)
---     bimap f g (BinInt op i1 i2) = BinInt op (bimap f g i1) (bimap f g i2)
---     bimap f g (BinForm op f1 f2) = BinForm op (bimap f g f1) (bimap f g f2)
---     bimap f g (Neg f1) = Neg (bimap f g f1)
-
 
 empty :: SetLang e s
 empty = FSet []
@@ -152,6 +137,9 @@ mkSet xs = FSet xs
 
 data Level = Term | Formula | Structure | Sequent deriving (Show, Generic, ToJSON)
 
+genSingletons [''Level]
+
+
 deriving instance Eq Level
 deriving instance Ord Level
 
@@ -164,12 +152,6 @@ type family Raise (l :: Level) = result | result -> l where
     Raise 'Formula = 'Structure
     Raise 'Term = 'Formula
     -- Raise 'Name = 'Term
-
--- type family IsName (l :: Level) where
---     IsName 'Name = 'True
---     IsName a = 'False
-
-
 
 
 data CTyp e s = Any | FSetDecl [e] | CSetDecl s [FormulaLang e s] deriving (Show, Generic, ToJSON)
@@ -192,48 +174,6 @@ getLevel (CType l _) = Just l
 getLevel (CListType l _) = Just l
 
 
--- instance Bifunctor CTTerms.Core.Type where
---     bimap _ vf (NVar v) = NVar $ map vf v
---     bimap tf _ (CType l t) = CType l $ map tf t
---     bimap _ vf (CListType l v) = CListType l $ liftM vf v
-
--- data Decl n a = Decl n [CTTerms.Core.Type (a, [FormulaLang a a]) a] (CTTerms.Core.Type (a, [FormulaLang a a]) a) 
---     deriving Show
-
--- instance Bifunctor Decl where
---     bimap nf af (Decl n ts t) = Decl (nf n) (map (bimap (bimap af (map (bimap af af))) af) ts) (bimap (bimap af (map (bimap af af))) af t)
--- -- data Assoc = Left | Right
-
-
-
--- data ParserSyntax = 
---     Const Text
---   | Ident
---   | IdentWithPrefix Text
---   | Prefix {
---         syntax :: Text,
---         fixity :: Int
---     }
---   | Infix {
---         syntax :: Text, 
---         fixity :: Int,
---         assoc :: Text.Earley.Mixfix.Associativity
---     }
---   | Mixfix {
---         syntax :: Text, 
---         fixity :: Int
---     }
-
--- data DeclSyntax a = DeclSyntax {
---     name :: a,
---     parserSyntax :: ParserSyntax,
---     katexSyntax :: Maybe Text, 
---     latexSyntax :: Text
--- }
-
-
-
-
 data TermKind = Concrete | Meta
 
 data CTTerm (l :: Level) (k :: TermKind) t a where
@@ -247,11 +187,87 @@ data CTTerm (l :: Level) (k :: TermKind) t a where
     Seq :: CTTerm 'Structure k t a -> CTTerm 'Structure k t a -> CTTerm 'Sequent k t a
 
 deriving instance (Show t , Show a) => Show (CTTerm l k t a)
+deriving instance (Eq t, Eq a) => Eq (CTTerm l k t a)
+deriving instance (Ord t, Ord a) => Ord (CTTerm l k t a)
+
 
 $(deriveBifunctor ''CTTerm)
 
--- instance Bifunctor (CTTerm l k) where
---     bimap _ af (Nm a) = Nm $ af a
---     bimap tf af (Lift x) = Lift $ bimap tf af x
---     bimap tf af (Con c xs t) = Con c (map (bimap tf af) xs) (tf t)
---     bimap tf af (Seq l r) = Seq (bimap tf af l) (bimap tf af r)
+
+data LevelList (l :: Level) a where
+    One :: a -> LevelList 'Term a
+    Cons :: a -> LevelList (Lower l) a -> LevelList l a 
+
+deriving instance Show a => Show (LevelList l a)
+deriving instance Functor (LevelList l)
+deriving instance Foldable (LevelList l)
+
+
+headLL :: LevelList l a -> a
+headLL (One a) = a
+headLL (Cons a _) = a
+
+
+type family IsTerm (l :: Level) where
+    IsTerm 'Term = 'True
+    IsTerm l = 'False
+
+tailLL :: IsTerm l ~ 'False => LevelList l a -> LevelList (Lower l) a
+tailLL (Cons _ xs) = xs
+
+
+
+-- isTerm :: LevelList l a -> Bool
+-- isTerm (One _) = True
+-- isTerm _ = False
+
+
+mkLevelList :: a -> a -> a -> LevelList 'Structure a
+mkLevelList a b c = Cons a $ Cons b $ One c
+
+newtype Module = Module [Text] 
+  deriving (Show, Generic, Typeable, Ord, Eq)
+  deriving anyclass ToJSON
+
+
+newtype Binding = Binding Int 
+    deriving (Eq, Ord, Generic) 
+    deriving newtype (Show, Num, Bounded)
+    deriving anyclass ToJSON
+
+data Fixity = 
+    Prefix { binding :: Binding }
+  | Infix {
+        binding :: Binding
+      , assoc :: Associativity
+    }
+  | Mixfix { binding :: Binding } deriving (Show, Generic, ToJSON)
+
+associativity :: Fixity -> Associativity
+associativity (Prefix _) = RightAssoc
+associativity (Infix _ a) = a
+associativity (Mixfix _) = NonAssoc
+
+data ConnDescription a t = ConnDescription {
+    name    :: a
+  , inTypes :: [t]
+  , outType :: t
+  , originalModule :: Module
+  , as :: Maybe Text
+  , fixity  :: Fixity
+  , latex   :: Maybe a
+  , katex   :: Maybe a
+} deriving Show
+
+$(deriveBifunctor ''ConnDescription)
+
+
+
+data CalcDesc a r = CalcDesc {
+    conns  :: LevelList 'Structure [ConnDescription a (Type a a)]
+  , mod    :: Module
+  , rules  :: r
+  -- , macros :: Map Text (Int,Text)
+} deriving Show
+
+

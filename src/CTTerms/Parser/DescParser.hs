@@ -26,16 +26,18 @@
 {-# LANGUAGE ViewPatterns, PatternSynonyms #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
+
 
 module CTTerms.Parser.DescParser(
-    Binding(..), CTTerms.Parser.DescParser.Fixity(..), DescParse(..), Visibility(..),
+    Binding(..), Fixity(..), DescParse(..), Visibility(..),
     tokenizeDescParse,
     gSetLang, gIntLang, gFormulaLang, gType, gDescParse, gDescParseList) where
 
 import CTTerms.Core
 import CTTerms.Parser.Core
 
-import           Lib.Prelude
+import           Lib.Prelude hiding (Associativity, Infix, Prefix, Fixity, Type, Any)
 import qualified Prelude            as P
 
 -- import           Data.Singletons
@@ -71,22 +73,6 @@ import           Text.Earley.Mixfix(Associativity(..), mixfixExpressionSeparate)
 -- debug :: a -> P.String -> a
 -- debug a m = Debug.Trace.trace m a
 
-
-
-newtype Binding = Binding Int deriving (Eq, Show, Ord, Generic, ToJSON)
-
-deriving instance Generic Text.Earley.Mixfix.Associativity
-deriving instance ToJSON Text.Earley.Mixfix.Associativity
-
-data Fixity = 
-    Prefix Binding
-  | Infix {
-        binding :: Binding
-      , assoc :: Text.Earley.Mixfix.Associativity
-    }
-  | Mixfix Binding deriving (Show, Generic, ToJSON)
-
-
 data PragmaTy = Macro deriving (Show, Generic, ToJSON)
 
 data Visibility a = Visible [a] | Hidden [a] deriving (Show, Functor, Generic, ToJSON)
@@ -94,12 +80,12 @@ data Visibility a = Visible [a] | Hidden [a] deriving (Show, Functor, Generic, T
 data DescParse a = 
     TypeSig {
         name :: a
-      , inTys :: [CTTerms.Core.Type a a] 
-      , outTy :: CTTerms.Core.Type a a
+      , inTypes :: [Type a a] 
+      , outType :: Type a a
     }
   | ParserOpts {
         name :: a
-      , fixity :: CTTerms.Parser.DescParser.Fixity
+      , fixity :: Fixity
     }
   | SyntaxOpts {
         name :: a
@@ -161,7 +147,7 @@ gSetLang = mdo
     fSet  <- rule $ (\xs -> FSet xs) <$> (namedToken "{" *> list <* namedToken "}")
  
     setOp <- rule $
-            (\_ -> CTTerms.Core.Intersection) <$> namedToken "&&"
+            (\_ -> Intersection) <$> namedToken "&&"
         <|> (\_ -> Union)                     <$> namedToken "||"
         <|> (\_ -> DisjointUnion)             <$> namedToken "||*"
 
@@ -174,7 +160,7 @@ gSetLang = mdo
     return expr
     where
         table = mkTable
-            [ [("_&_",  LeftAssoc, SOp CTTerms.Core.Intersection . Right), 
+            [ [("_&_",  LeftAssoc, SOp Intersection . Right), 
                ("_|_",  LeftAssoc, SOp Union . Right),
                ("_|*_", LeftAssoc, SOp DisjointUnion . Right)]
             , [("_-_",  LeftAssoc, SOp Difference . Right)]
@@ -196,7 +182,7 @@ gCompOp :: G a -> G (CompOp, a, a)
 gCompOp gLang = mdo
     atom   <- gLang
     compOp <- rule $
-            (\_ -> CTTerms.Core.Eq) <$> namedToken "="
+            (\_ -> Eq) <$> namedToken "="
         <|> (\_ -> CTTerms.Core.LT) <$> namedToken "<"
         <|> (\_ -> LTEq)            <$> namedToken "<="
         <|> (\_ -> CTTerms.Core.GT) <$> namedToken ">"
@@ -244,7 +230,7 @@ reservedType :: HashSet Text
 reservedType = HS.fromList [":", "(", ")", "...", "where", ";", "List", "Name", "Term", "Formula", "Structure"] 
     `HS.union` reservedFormulaLang
 
-gType :: G (CTTerms.Core.Type (Token Text) (Token Text))
+gType :: G (Type (Token Text) (Token Text))
 gType = mdo
     name        <- rule $ var reservedDescParse
     nVar        <- rule $
@@ -265,7 +251,7 @@ gType = mdo
             (,[]) <$> name -- Term x
         <|> (,) <$> (namedToken "(" *> name <* namedToken "where") <*> (assertList <* namedToken ")") -- Term (x where ...)
     cType       <- rule $
-            (\l -> CType l CTTerms.Core.Any) <$> level
+            (\l -> CType l Any) <$> level
         <|> (\l ts -> CType l (uncurry CSetDecl ts)) <$> level <*> constraints
         <|> (\l ts -> CType l (FSetDecl ts)) <$> level <*> (namedToken "{" *> list <* namedToken "}") -- Term {a,b,c}
 
@@ -297,9 +283,9 @@ gDescParse = mdo
 
     intVal <- rule $ (P.read . toS . unTok) <$> satisfyT (all isDigit . (toS  :: Text -> P.String))
     parserOpts <- rule $
-            (\n b -> ParserOpts n (CTTerms.Parser.DescParser.Infix (Binding b) LeftAssoc)) <$> (namedToken "infixl" *> name) <*> intVal
-        <|> (\n b -> ParserOpts n (CTTerms.Parser.DescParser.Infix (Binding b) RightAssoc)) <$> (namedToken "infixr" *> name) <*> intVal
-        <|> (\n b -> ParserOpts n (CTTerms.Parser.DescParser.Prefix (Binding b))) <$> (namedToken "prefix" *> name) <*> intVal
+            (\n b -> ParserOpts n (Infix (Binding b) LeftAssoc)) <$> (namedToken "infixl" *> name) <*> intVal
+        <|> (\n b -> ParserOpts n (Infix (Binding b) RightAssoc)) <$> (namedToken "infixr" *> name) <*> intVal
+        <|> (\n b -> ParserOpts n (Prefix (Binding b))) <$> (namedToken "prefix" *> name) <*> intVal
         <|> (\n b -> ParserOpts n (Mixfix (Binding b))) <$> (namedToken "mixfix" *> name) <*> intVal
 
     latexSyntax <- rule $ 
@@ -329,6 +315,9 @@ gDescParse = mdo
 
     import1 <- rule $
             (\n -> Import n Nothing (Hidden [])) <$> (namedToken "import" *> modName)
+        <|> (\n as -> Import n (Just as) (Hidden [])) <$> 
+            (namedToken "import" *> modName) <*>
+            (namedToken "as" *> var reservedDescParse)
     import2 <- rule $
             (\n vs -> Import n Nothing (Visible vs)) <$> 
                 (namedToken "import" *> modName) <*> 
@@ -350,8 +339,8 @@ gDescParse = mdo
             (Text.Earley.list ["hiding" , "("] *> nameList <* namedToken ")") <*>
             (namedToken "as" *> var reservedDescParse)
 
-    let imports = import1 <|> import2 <|> import3
-    return $ typeSig <|> parserOpts <|> syntaxOpts <|> pragma <|> imports
+    let imports = import3 <|> import2 <|> import1
+    return $ imports <|> typeSig <|> parserOpts <|> syntaxOpts <|> pragma
 
 
 
