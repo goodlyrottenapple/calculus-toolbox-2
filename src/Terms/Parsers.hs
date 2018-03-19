@@ -51,10 +51,6 @@ import           Text.Regex         (mkRegex, splitRegex)
 -- import Control.Monad.Catch
 
 
-deriving instance Generic Associativity
-deriving instance ToJSON Associativity
-
-
 ------------------------- Parsing of the Description file -------------------------
 
 reservedCalcFile :: HashSet P.String

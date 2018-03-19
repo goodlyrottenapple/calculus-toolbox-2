@@ -27,15 +27,17 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Lib.Prelude
-    ( module Exports, MonadThrowJSON(..), SomeVec(..)
+    ( module Exports, module Logger, MonadThrowJSON(..), SomeVec(..)
       , Length, Vec, vec, Copy, NotZ, pattern Nil, pattern (:>), eqLen, zipV, tlength
       , uncurry3
       , MapLike(..)
       , readFile'
+      , (~>)
     ) where
 
 import           GHC.TypeLits
 import           Protolude     as Exports
+import Control.Monad.Logger as Logger
 import           Unsafe.Coerce (unsafeCoerce)
 
 import           Data.Aeson
@@ -44,6 +46,7 @@ import qualified Data.Map as M
 import System.IO (hSetNewlineMode, universalNewlineMode)
 import Data.Text.IO (hGetContents)
 import           Text.Earley(Report(..))
+import Text.Earley.Mixfix(Associativity(..))
 
 class Monad m => MonadThrowJSON m where
   throw :: (ToJSON e, Exception e) => e -> m a
@@ -62,6 +65,8 @@ instance MonadThrowJSON m => MonadThrowJSON (ReaderT r m) where
 deriving instance Generic a => Generic (Report a [a])
 deriving instance (Generic a, ToJSON a) => ToJSON (Report a [a])
 
+deriving instance Generic Text.Earley.Mixfix.Associativity
+deriving instance ToJSON Text.Earley.Mixfix.Associativity
 
 
 -- instance e ~ SomeException => MonadThrowJSON (Either e) where
@@ -94,6 +99,9 @@ readFile' name = do
     liftIO $ hGetContents h
 
 
+-- implies
+(~>) :: Bool -> Bool -> Bool
+a ~> b = not a || b
 
 
 ---- get rid of the stuff below ----

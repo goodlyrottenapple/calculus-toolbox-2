@@ -36,8 +36,8 @@ import qualified Data.Map                    as M
 import qualified Data.Set                    as S
 
 -- import qualified Data.Text as T
-import Control.Monad.Except
-import Control.Monad.Reader
+-- import Control.Monad.Except
+-- import Control.Monad.Reader
 -- import Text.Earley
 import System.FilePath.Posix((</>), dropExtension, takeExtension)
 import qualified System.FilePath.Posix as FP

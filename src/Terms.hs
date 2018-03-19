@@ -42,7 +42,7 @@ import           Data.Singletons.TH
 import           Unsafe.Coerce      (unsafeCoerce)
 import           Data.Aeson
 import           Text.Earley.Mixfix (Associativity)
-import           GHC.TypeLits
+-- import           GHC.TypeLits
 
 
 $(singletons [d| data Level = AtomL | FormulaL | StructureL deriving (Show, Generic, ToJSON, FromJSON) |])
@@ -171,10 +171,17 @@ emptyFinTypeCalculusDescription :: r -> FinTypeCalculusDescription r
 emptyFinTypeCalculusDescription r = Description S.empty (Type "") [] [] r M.empty
 
 
--- right append, where the right CaclDesc is favored, i.e. the default type is taken from the right
-instance Semigroup r => Semigroup (FinTypeCalculusDescription r) where
-    (Description ts _ fConns sConns rls mcrs) <> (Description ts' dT' fConns' sConns' rls' mcrs') = 
-        Description (S.union ts ts') dT' (fConns ++ fConns') (sConns ++ sConns') (rls <> rls') (M.union mcrs' mcrs)
+
+instance Monoid r => Monoid (FinTypeCalculusDescription r) where
+    mempty = emptyFinTypeCalculusDescription mempty
+    mappend (Description ts _ fConns sConns rls mcrs) (Description ts' dT' fConns' sConns' rls' mcrs') = 
+        Description (S.union ts ts') dT' (fConns ++ fConns') (sConns ++ sConns') (mappend rls rls') (M.union mcrs' mcrs)
+
+
+-- -- right append, where the right CaclDesc is favored, i.e. the default type is taken from the right
+-- instance Sem.Semigroup r => Sem.Semigroup (FinTypeCalculusDescription r) where
+--     (Description ts _ fConns sConns rls mcrs) <> (Description ts' dT' fConns' sConns' rls' mcrs') = 
+--         Description (S.union ts ts') dT' (fConns ++ fConns') (sConns ++ sConns') (rls Sem.<> rls') (M.union mcrs' mcrs)
 
 
 data DSequent k a = DSeq (Term 'StructureL k a) CalcType (Term 'StructureL k a) deriving (Show, Eq)

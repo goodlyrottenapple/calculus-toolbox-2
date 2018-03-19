@@ -16,17 +16,19 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   ghc-options:         -Wall -Werror
-  exposed-modules:     Terms
-                     , Rules
+  exposed-modules:     CTTerms.Core
+                     --, Terms
+                     --, Rules
                      -- , Rules.CutElimConditions
-                     , Terms.Parsers
-                     , Terms.JSON
-                     , CTTerms.Core
+                     --, Terms.Parsers
+                     -- , Terms.JSON
+                     --, CTTerms.Core
                      , CTTerms.Parser.Core
                      , CTTerms.Parser.DescParser
                      , CTTerms.Typing.DescParser
+                     , CTTerms.Parser.CTTermParser
                      -- , CTTerms.Typing
-                     , GUI
+                     --, GUI
   other-modules:       Lib.Prelude
                      , Servant.JS.Custom
   build-depends:       base >= 4.7 && < 5
@@ -56,9 +58,11 @@ library
                      , directory
                      , lens
                      , servant-foreign
+                     , monad-logger
                      -- , exceptions
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude, DuplicateRecordFields, DataKinds, DeriveGeneric, FlexibleContexts
+
 
 executable calculus-toolbox
   hs-source-dirs:      app
