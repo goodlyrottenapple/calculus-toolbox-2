@@ -263,6 +263,7 @@ checkTypeSig TypeSig{..} = do
         levelMatches l (Nothing:tys) = levelMatches l tys
         levelMatches (Just l) ((Just l'):tys) 
             | l == l' = levelMatches (Just l) tys
+            | l == Sequent && l' == Structure = levelMatches (Just l) tys -- sequent is allowed to be non-level uniform
             | otherwise = do
                 m <- ask
                 throw $ NotLevelUniform {
@@ -427,7 +428,7 @@ mkConnDescription :: (MonadReader Module m, Ord a) =>
 mkConnDescription fixityMap syntaxMap as (name, inTypes, outType) = do
     originalModule <- ask
     let fixity = case M.lookup name fixityMap of
-        { Just f -> f; Nothing -> Prefix maxBound } -- this is a bit arbitrary atm!!
+        { Just f -> f; Nothing -> Mixfix maxBound } -- this is a bit arbitrary atm!!
         (latex,katex) = case M.lookup name syntaxMap of
         { Just x -> x; Nothing -> (Nothing, Nothing) }
     return ConnDescription{..}
@@ -467,7 +468,7 @@ mkCalcDesc ::
     StringConv s FilePath, 
     StringConv s Text) => 
     FilePath -> [s] -> Maybe s -> Visibility s -> 
-    m (LevelList 'Structure [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
+    m (LevelList 'Sequent [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
     --m () --m (CalcDesc Text ())
 mkCalcDesc basePath modulePathList as visibility = do
     -- open calc file
@@ -498,11 +499,13 @@ mkCalcDesc basePath modulePathList as visibility = do
         trmTySigs = filter (\(_, _, outType) -> getLevel outType == Just Term)      typeSigs
         fmlTySigs = filter (\(_, _, outType) -> getLevel outType == Just Formula)   typeSigs
         strTySigs = filter (\(_, _, outType) -> getLevel outType == Just Structure) typeSigs
+        seqTySigs = filter (\(_, _, outType) -> getLevel outType == Just Sequent) typeSigs
 
     trmConns <- mkConns fixityMap syntaxMap trmTySigs
     fmlConns <- mkConns fixityMap syntaxMap fmlTySigs
     strConns <- mkConns fixityMap syntaxMap strTySigs
-    let conns = mkLevelList strConns fmlConns trmConns
+    seqConns <- mkConns fixityMap syntaxMap seqTySigs
+    let conns = mkLevelList seqConns strConns fmlConns trmConns
 
     return conns
     -- merge??
@@ -531,5 +534,5 @@ mkCalcDesc basePath modulePathList as visibility = do
 
 
 
-test :: IO (LevelList 'Structure [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
+test :: IO (LevelList 'Sequent [ConnDescription (Token Text) (Type (Token Text) (Token Text))])
 test =  evalStateT (mkCalcDesc "./test" [("Lattice" :: Text)] Nothing (Hidden [])) M.empty

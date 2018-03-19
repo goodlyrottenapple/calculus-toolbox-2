@@ -227,7 +227,7 @@ gFormulaLang = mdo
 
 
 reservedType :: HashSet Text
-reservedType = HS.fromList [":", "(", ")", "...", "where", ";", "List", "Name", "Term", "Formula", "Structure"] 
+reservedType = HS.fromList [":", "(", ")", "...", "where", ";", "List", "Name", "Term", "Formula", "Structure", "Sequent"] 
     `HS.union` reservedFormulaLang
 
 gType :: G (Type (Token Text) (Token Text))
@@ -240,6 +240,7 @@ gType = mdo
             (\_ -> Term) <$> namedToken "Term"
         <|> (\_ -> Formula) <$> namedToken "Formula"
         <|> (\_ -> Structure) <$> namedToken "Structure"
+        <|> (\_ -> Sequent) <$> namedToken "Sequent"
     assertLang  <- gFormulaLang
     assertList  <- rule $ (:[]) <$> assertLang
                        <|> (:) <$> assertLang <* namedToken ";" <*> assertList

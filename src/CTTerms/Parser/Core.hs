@@ -136,11 +136,11 @@ incrBy (_:xs) = do
     incrBy xs
 
 data TokenizerSettings = TokenizerSettings {
-    reserved :: [P.String]
-  , comment :: [(P.String, P.String)]
-  , block :: [(P.String, P.String)]
-  , delim :: [Char]
-  , special :: [Char]
+    reserved :: [P.String] -- tokens which are special
+  , comment :: [(P.String, P.String)] -- ignores everything from the start token till the end, inclusive
+  , block :: [(P.String, P.String)] -- like comment but keeps the whole block and the start/end tokens
+  , delim :: [Char] -- parses a string of two or more characters as a delimiter, e.g. ----- or ===
+  , special :: [Char] -- should include first charachter of each special token
 } deriving Show
 
 defaultTokenizerSettings :: TokenizerSettings

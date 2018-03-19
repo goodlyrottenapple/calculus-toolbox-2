@@ -144,14 +144,16 @@ deriving instance Eq Level
 deriving instance Ord Level
 
 type family Lower (l :: Level) = result | result -> l where
-    Lower 'Structure = 'Formula
-    Lower 'Formula = 'Term
-    -- Lower 'Term = 'Name
+  Lower 'Sequent = 'Structure
+  Lower 'Structure = 'Formula
+  Lower 'Formula = 'Term
+  --Lower 'Term = 'Name
 
 type family Raise (l :: Level) = result | result -> l where
-    Raise 'Formula = 'Structure
-    Raise 'Term = 'Formula
-    -- Raise 'Name = 'Term
+  Raise 'Term = 'Formula
+  Raise 'Formula = 'Structure
+  Raise 'Structure = 'Sequent
+  -- Raise 'Name = 'Term
 
 
 data CTyp e s = Any | FSetDecl [e] | CSetDecl s [FormulaLang e s] deriving (Show, Generic, ToJSON)
@@ -174,7 +176,10 @@ getLevel (CType l _) = Just l
 getLevel (CListType l _) = Just l
 
 
-data TermKind = Concrete | Meta
+data TermKind = Concrete | Meta deriving (Show, Eq)
+
+genSingletons [''TermKind]
+
 
 data CTTerm (l :: Level) (k :: TermKind) t a where
     Nm :: a -> CTTerm l k t a
@@ -183,8 +188,7 @@ data CTTerm (l :: Level) (k :: TermKind) t a where
     Con :: -- SingI l => -- this is a bit of a hack :/
         Text -> [CTTerm l k t a] -> t -> CTTerm l k t a
     -- List :: [CTTerm 'Term k t a] -> CTTerm 'Term k t a
-    -- Abbrev :: Text -> CTTerm (Raise l) 'Concrete t a -> CTTerm (Raise l) 'Concrete t a
-    Seq :: CTTerm 'Structure k t a -> CTTerm 'Structure k t a -> CTTerm 'Sequent k t a
+    Abbrev :: Text -> Maybe (CTTerm l 'Concrete t a) -> CTTerm l 'Concrete t a
 
 deriving instance (Show t , Show a) => Show (CTTerm l k t a)
 deriving instance (Eq t, Eq a) => Eq (CTTerm l k t a)
@@ -222,8 +226,8 @@ tailLL (Cons _ xs) = xs
 -- isTerm _ = False
 
 
-mkLevelList :: a -> a -> a -> LevelList 'Structure a
-mkLevelList a b c = Cons a $ Cons b $ One c
+mkLevelList :: a -> a -> a -> a -> LevelList 'Sequent a
+mkLevelList a b c d = Cons a $ Cons b $  Cons c $ One d
 
 newtype Module = Module [Text] 
   deriving (Show, Generic, Typeable, Ord, Eq)
